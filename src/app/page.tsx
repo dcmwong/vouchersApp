@@ -79,18 +79,44 @@ export default function HomePage() {
           <p style={{ color: "#6b7280", maxWidth: "28rem" }}>
             You&apos;re signed in. Upload a voucher to catalogue it automatically.
           </p>
-          <a
-            href="/upload"
-            style={{
-              padding: "0.6rem 1.25rem",
-              borderRadius: "0.5rem",
-              background: "#111827",
-              color: "white",
-              textDecoration: "none",
-            }}
-          >
-            Upload a voucher
-          </a>
+          <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", justifyContent: "center" }}>
+            <a
+              href="/upload"
+              style={{
+                padding: "0.6rem 1.25rem",
+                borderRadius: "0.5rem",
+                background: "#111827",
+                color: "white",
+                textDecoration: "none",
+              }}
+            >
+              Upload a voucher
+            </a>
+            <a
+              href="/vouchers"
+              style={{
+                padding: "0.6rem 1.25rem",
+                borderRadius: "0.5rem",
+                border: "1px solid #d1d5db",
+                color: "inherit",
+                textDecoration: "none",
+              }}
+            >
+              My vouchers
+            </a>
+            <a
+              href="/groups"
+              style={{
+                padding: "0.6rem 1.25rem",
+                borderRadius: "0.5rem",
+                border: "1px solid #d1d5db",
+                color: "inherit",
+                textDecoration: "none",
+              }}
+            >
+              Groups
+            </a>
+          </div>
         </SignedIn>
       </section>
     </main>

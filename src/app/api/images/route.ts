@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { categoriseImage } from "@/services/categoriseImage";
 import { uploadImage } from "@/services/imageUpload";
+import { getPrimaryGroupId, listVisibleImages } from "@/services/groups";
 
 // Cloudflare Pages requires the edge runtime for routes that use bindings/fetch.
 export const runtime = "edge";
@@ -105,6 +106,9 @@ export async function POST(req: Request): Promise<Response> {
     console.error("Image categorisation failed", err);
   }
 
+  // Auto-share: tag the upload with the user's group so everyone in it sees it.
+  const groupId = await getPrimaryGroupId(userId);
+
   try {
     const image = await uploadImage({
       userId,
@@ -116,6 +120,7 @@ export async function POST(req: Request): Promise<Response> {
       brand,
       value,
       refId,
+      groupId,
       tags,
     });
 
@@ -125,5 +130,26 @@ export async function POST(req: Request): Promise<Response> {
     // Validation errors (size / mime type) are client errors; the rest are 500.
     const status = /5MB limit|Unsupported mime type/.test(message) ? 400 : 500;
     return Response.json({ error: message }, { status });
+  }
+}
+
+/**
+ * GET /api/images
+ *
+ * Lists the vouchers the current user can see: their own plus any shared with
+ * a group they belong to.
+ */
+export async function GET(req: Request): Promise<Response> {
+  const userId = await resolveUserId(req);
+  if (!userId) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const images = await listVisibleImages(userId);
+    return Response.json({ images });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to list images.";
+    return Response.json({ error: message }, { status: 500 });
   }
 }

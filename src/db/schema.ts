@@ -1,5 +1,40 @@
 import { sql } from "drizzle-orm";
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+  integer,
+  primaryKey,
+  sqliteTable,
+  text,
+} from "drizzle-orm/sqlite-core";
+
+const timestamp = (name: string) =>
+  text(name)
+    .notNull()
+    .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`);
+
+// A group (e.g. a family) that vouchers can be shared with.
+export const groups = sqliteTable("groups", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  joinCode: text("join_code").notNull().unique(), // share this to let others join
+  createdBy: text("created_by").notNull(), // Clerk user ID of the creator
+  createdAt: timestamp("created_at"),
+});
+
+// Membership: which Clerk users belong to which groups.
+export const groupMembers = sqliteTable(
+  "group_members",
+  {
+    groupId: text("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(), // Clerk user ID
+    role: text("role").notNull().default("member"), // "admin" | "member"
+    createdAt: timestamp("created_at"),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.groupId, t.userId] }),
+  }),
+);
 
 export const images = sqliteTable("images", {
   id: text("id").primaryKey(), // nanoid
@@ -15,14 +50,16 @@ export const images = sqliteTable("images", {
   // Note: card number and PIN are intentionally NOT persisted. They are
   // extracted for the upload response only — never written to the database.
   refId: text("ref_id"),
+  // When set, every member of this group can see the image. Null = private to userId.
+  groupId: text("group_id").references(() => groups.id, {
+    onDelete: "set null",
+  }),
   tags: text("tags", { mode: "json" }).$type<string[]>().default([]),
-  createdAt: text("created_at")
-    .notNull()
-    .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
-  updatedAt: text("updated_at")
-    .notNull()
-    .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
 });
 
 export type Image = typeof images.$inferSelect;
 export type NewImage = typeof images.$inferInsert;
+export type Group = typeof groups.$inferSelect;
+export type GroupMember = typeof groupMembers.$inferSelect;

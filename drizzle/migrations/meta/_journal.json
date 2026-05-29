@@ -15,6 +15,13 @@
       "when": 1780050953344,
       "tag": "0001_fantastic_argent",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1780059467324,
+      "tag": "0002_kind_praxagora",
+      "breakpoints": true
     }
   ]
 }
