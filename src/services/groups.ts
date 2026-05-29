@@ -1,4 +1,4 @@
-import { desc, eq, inArray, or } from "drizzle-orm";
+import { and, desc, eq, inArray, or } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   groupMembers,
@@ -99,11 +99,50 @@ export async function getPrimaryGroupId(
   return rows[0]?.groupId ?? null;
 }
 
-/** Images the user can see: their own plus anything shared with their groups. */
+/**
+ * Active images the user can see: their own plus anything shared with their
+ * groups. Inactive (used/expired) vouchers are excluded.
+ */
 export async function listVisibleImages(userId: string): Promise<Image[]> {
   const groupIds = await getUserGroupIds(userId);
   const visible = groupIds.length
     ? or(eq(images.userId, userId), inArray(images.groupId, groupIds))
     : eq(images.userId, userId);
-  return db.select().from(images).where(visible).orderBy(desc(images.createdAt));
+  return db
+    .select()
+    .from(images)
+    .where(and(eq(images.active, true), visible))
+    .orderBy(desc(images.createdAt));
+}
+
+/** True if the user owns the image or shares a group with it. */
+async function canAccessImage(userId: string, image: Image): Promise<boolean> {
+  if (image.userId === userId) return true;
+  if (!image.groupId) return false;
+  return (await getUserGroupIds(userId)).includes(image.groupId);
+}
+
+/**
+ * Sets a voucher active/inactive. Allowed for the owner or any member of the
+ * group it's shared with. Returns the updated image, or null if not found or
+ * the user isn't allowed to touch it.
+ */
+export async function setImageActive(
+  userId: string,
+  imageId: string,
+  active: boolean,
+): Promise<Image | null> {
+  const found = await db
+    .select()
+    .from(images)
+    .where(eq(images.id, imageId))
+    .limit(1);
+  const image = found[0];
+  if (!image || !(await canAccessImage(userId, image))) return null;
+
+  await db
+    .update(images)
+    .set({ active, updatedAt: new Date().toISOString() })
+    .where(eq(images.id, imageId));
+  return { ...image, active };
 }

@@ -54,6 +54,8 @@ export const images = sqliteTable("images", {
   groupId: text("group_id").references(() => groups.id, {
     onDelete: "set null",
   }),
+  // Inactive vouchers (e.g. used/expired) are hidden from the listing.
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
   tags: text("tags", { mode: "json" }).$type<string[]>().default([]),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),

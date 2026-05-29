@@ -17,6 +17,7 @@ export function VouchersList() {
   const [items, setItems] = useState<Voucher[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -27,6 +28,35 @@ export function VouchersList() {
       setLoading(false);
     })();
   }, []);
+
+  async function deactivate(v: Voucher) {
+    const label = v.title ?? "this voucher";
+    if (
+      !window.confirm(
+        `Mark "${label}" as inactive? It will no longer appear in this list.`,
+      )
+    ) {
+      return;
+    }
+    setBusyId(v.id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/images/${v.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active: false }),
+      });
+      if (!res.ok) {
+        const data = (await res.json()) as { error?: string };
+        throw new Error(data.error ?? `Failed (HTTP ${res.status})`);
+      }
+      setItems((prev) => prev.filter((x) => x.id !== v.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   if (loading) return <p style={{ color: "#6b7280" }}>Loading…</p>;
   if (error) return <p style={{ color: "#b91c1c" }}>⚠ {error}</p>;
@@ -56,11 +86,26 @@ export function VouchersList() {
                 .join(" · ")}
             </div>
           </div>
-          <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+          <div style={{ textAlign: "right", whiteSpace: "nowrap", display: "grid", gap: "0.35rem", justifyItems: "end" }}>
             <div style={{ fontWeight: 700 }}>{v.value ?? ""}</div>
             {v.groupId && (
               <div style={{ color: "#047857", fontSize: "0.75rem" }}>shared</div>
             )}
+            <button
+              onClick={() => deactivate(v)}
+              disabled={busyId === v.id}
+              style={{
+                padding: "0.3rem 0.6rem",
+                borderRadius: "0.375rem",
+                border: "1px solid #d1d5db",
+                background: "transparent",
+                color: "#b91c1c",
+                cursor: busyId === v.id ? "default" : "pointer",
+                fontSize: "0.8rem",
+              }}
+            >
+              {busyId === v.id ? "…" : "Mark inactive"}
+            </button>
           </div>
         </div>
       ))}

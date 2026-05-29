@@ -74,6 +74,7 @@ export async function uploadImage(input: UploadImageInput): Promise<Image> {
     value: input.value ?? null,
     refId: input.refId ?? null,
     groupId: input.groupId ?? null,
+    active: true,
     tags: input.tags ?? [],
     createdAt: now,
     updatedAt: now,
