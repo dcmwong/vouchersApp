@@ -59,7 +59,11 @@ export const images = sqliteTable("images", {
     .notNull()
     .default("uncategorised")
     .references(() => brands.id),
+  // Face value at issue (as read from the card).
   value: text("value"),
+  // Manually-maintained remaining balance, and when it was last updated.
+  currentValue: text("current_value"),
+  valueUpdatedAt: text("value_updated_at"),
   // Note: card number and PIN are intentionally NOT persisted. They are
   // extracted for the upload response only — never written to the database.
   refId: text("ref_id"),

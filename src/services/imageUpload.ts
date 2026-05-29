@@ -74,6 +74,9 @@ export async function uploadImage(input: UploadImageInput): Promise<Image> {
     brand: input.brand ?? null,
     brandId: input.brandId ?? "uncategorised",
     value: input.value ?? null,
+    // Current balance starts at the face value, stamped now.
+    currentValue: input.value ?? null,
+    valueUpdatedAt: now,
     refId: input.refId ?? null,
     groupId: input.groupId ?? null,
     active: true,

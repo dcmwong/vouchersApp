@@ -1,5 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { updateImageFlags } from "@/services/groups";
+import { listBrands } from "@/services/brands";
 
 export const runtime = "edge";
 
@@ -17,15 +18,38 @@ export async function PATCH(
   const { userId } = await auth();
   if (!userId) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-  let patch: { active?: boolean; isLoyalty?: boolean };
+  let patch: {
+    active?: boolean;
+    isLoyalty?: boolean;
+    currentValue?: string;
+    brand?: string;
+    brandId?: string;
+  };
   try {
     const body = (await req.json()) as Record<string, unknown>;
     patch = {};
     if (typeof body.active === "boolean") patch.active = body.active;
     if (typeof body.isLoyalty === "boolean") patch.isLoyalty = body.isLoyalty;
-    if (patch.active === undefined && patch.isLoyalty === undefined) {
+    if (typeof body.currentValue === "string") {
+      patch.currentValue = body.currentValue.trim();
+    }
+    if (typeof body.brandId === "string") {
+      // Validate against the controlled vocabulary and set the display name.
+      const brand = (await listBrands()).find((b) => b.id === body.brandId);
+      if (!brand) {
+        return Response.json({ error: "Unknown brand." }, { status: 400 });
+      }
+      patch.brandId = brand.id;
+      patch.brand = brand.name;
+    }
+    if (
+      patch.active === undefined &&
+      patch.isLoyalty === undefined &&
+      patch.currentValue === undefined &&
+      patch.brandId === undefined
+    ) {
       return Response.json(
-        { error: "Provide a boolean `active` and/or `isLoyalty`." },
+        { error: "Provide `active`, `isLoyalty`, `currentValue`, or `brandId`." },
         { status: 400 },
       );
     }

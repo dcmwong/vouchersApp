@@ -14,12 +14,46 @@ interface Voucher {
   title: string | null;
   brand: string | null;
   value: string | null;
+  currentValue: string | null;
+  valueUpdatedAt: string | null;
   refId: string | null;
   tags: string[];
   groupId: string | null;
   isLoyalty: boolean;
+  brandId: string;
   url: string | null;
   createdAt: string;
+}
+
+interface Brand {
+  id: string;
+  name: string;
+}
+
+const UNCATEGORISED_ID = "uncategorised";
+
+/** Leading currency symbol of a value string ("£42.50" → "£"); defaults to "£". */
+function symbolOf(s: string | null | undefined): string {
+  const m = (s ?? "").match(/^[^\d.]+/);
+  return m?.[0].trim() || "£";
+}
+
+/** Numeric portion of a value string ("£42.50" → "42.50"). */
+function numericPart(s: string | null | undefined): string {
+  return (s ?? "").replace(/[^\d.]/g, "");
+}
+
+/** "2 Jun 2026, 14:30" — friendly local rendering of an ISO timestamp. */
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export function VouchersList() {
@@ -28,13 +62,25 @@ export function VouchersList() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [brandFilter, setBrandFilter] = useState("");
+  const [brandOptions, setBrandOptions] = useState<Brand[]>([]);
 
   useEffect(() => {
     (async () => {
-      const res = await fetch("/api/images");
-      const data = (await res.json()) as { images?: Voucher[]; error?: string };
-      if (!res.ok) setError(data.error ?? "Failed to load vouchers");
-      else setItems(data.images ?? []);
+      const [imgRes, brandRes] = await Promise.all([
+        fetch("/api/images"),
+        fetch("/api/brands"),
+      ]);
+      const imgData = (await imgRes.json()) as {
+        images?: Voucher[];
+        error?: string;
+      };
+      if (!imgRes.ok) setError(imgData.error ?? "Failed to load vouchers");
+      else setItems(imgData.images ?? []);
+
+      if (brandRes.ok) {
+        const brandData = (await brandRes.json()) as { brands?: Brand[] };
+        setBrandOptions(brandData.brands ?? []);
+      }
       setLoading(false);
     })();
   }, []);
@@ -61,6 +107,76 @@ export function VouchersList() {
         throw new Error(data.error ?? `Failed (HTTP ${res.status})`);
       }
       setItems((prev) => prev.filter((x) => x.id !== v.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusyId(null);
+    }
+  }, []);
+
+  const updateValue = useCallback(async (v: Voucher, newValue: string) => {
+    const currentValue = newValue.trim();
+    // Require an actual number, and skip if unchanged.
+    if (!/\d/.test(currentValue) || currentValue === v.currentValue) return;
+    setBusyId(v.id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/images/${v.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentValue }),
+      });
+      const data = (await res.json()) as {
+        image?: { currentValue: string | null; valueUpdatedAt: string | null };
+        error?: string;
+      };
+      if (!res.ok || !data.image) {
+        throw new Error(data.error ?? `Failed (HTTP ${res.status})`);
+      }
+      const updated = data.image;
+      setItems((prev) =>
+        prev.map((x) =>
+          x.id === v.id
+            ? {
+                ...x,
+                currentValue: updated.currentValue,
+                valueUpdatedAt: updated.valueUpdatedAt,
+              }
+            : x,
+        ),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusyId(null);
+    }
+  }, []);
+
+  const categorise = useCallback(async (v: Voucher, brandId: string) => {
+    if (!brandId || brandId === v.brandId) return;
+    setBusyId(v.id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/images/${v.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brandId }),
+      });
+      const data = (await res.json()) as {
+        image?: { brand: string | null; brandId: string };
+        error?: string;
+      };
+      if (!res.ok || !data.image) {
+        throw new Error(data.error ?? `Failed (HTTP ${res.status})`);
+      }
+      const updated = data.image;
+      setItems((prev) =>
+        prev.map((x) =>
+          x.id === v.id
+            ? { ...x, brand: updated.brand, brandId: updated.brandId }
+            : x,
+        ),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -107,19 +223,32 @@ export function VouchersList() {
         ))}
       </select>
 
-      <Carousel vouchers={ordered} busyId={busyId} onDeactivate={deactivate} />
+      <Carousel
+        vouchers={ordered}
+        brandOptions={brandOptions}
+        busyId={busyId}
+        onDeactivate={deactivate}
+        onUpdateValue={updateValue}
+        onCategorise={categorise}
+      />
     </div>
   );
 }
 
 function Carousel({
   vouchers,
+  brandOptions,
   busyId,
   onDeactivate,
+  onUpdateValue,
+  onCategorise,
 }: {
   vouchers: Voucher[];
+  brandOptions: Brand[];
   busyId: string | null;
   onDeactivate: (v: Voucher) => void;
+  onUpdateValue: (v: Voucher, newValue: string) => void;
+  onCategorise: (v: Voucher, brandId: string) => void;
 }) {
   const [emblaRef, emblaApi] = useEmblaCarousel({
     align: "center",
@@ -128,6 +257,8 @@ function Carousel({
   const [selected, setSelected] = useState(0);
   const [count, setCount] = useState(vouchers.length);
   const [fullscreen, setFullscreen] = useState<Voucher | null>(null);
+  // Per-voucher draft text for the balance editor.
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
   // Records pointer-down position so a swipe isn't mistaken for a tap.
   const pointerStart = useRef<{ x: number; y: number } | null>(null);
 
@@ -217,32 +348,30 @@ function Carousel({
                 ) : (
                   <div style={{ width: "100%", height: 300, background: "#f3f4f6" }} />
                 )}
-                <div
-                  style={{
-                    padding: "0.9rem 1.1rem",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: "1rem",
-                  }}
-                >
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 600 }}>
-                      {v.isLoyalty && <span title="Loyalty card">★ </span>}
-                      {v.title ?? "Untitled"}
+                <div style={{ padding: "0.9rem 1.1rem", display: "grid", gap: "0.75rem" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "start",
+                      gap: "1rem",
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 600 }}>
+                        {v.isLoyalty && <span title="Loyalty card">★ </span>}
+                        {v.title ?? "Untitled"}
+                      </div>
+                      <div style={{ color: "#6b7280", fontSize: "0.85rem" }}>
+                        {[
+                          v.brand,
+                          v.refId ? `Ref ${v.refId}` : null,
+                          v.groupId ? "shared" : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </div>
                     </div>
-                    <div style={{ color: "#6b7280", fontSize: "0.85rem" }}>
-                      {[
-                        v.brand,
-                        v.refId ? `Ref ${v.refId}` : null,
-                        v.groupId ? "shared" : null,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </div>
-                  </div>
-                  <div style={{ textAlign: "right", display: "grid", gap: "0.35rem", justifyItems: "end" }}>
-                    <div style={{ fontWeight: 700, whiteSpace: "nowrap" }}>{v.value ?? ""}</div>
                     <button
                       onClick={() => onDeactivate(v)}
                       disabled={busyId === v.id}
@@ -260,6 +389,116 @@ function Carousel({
                       {busyId === v.id ? "…" : "Mark inactive"}
                     </button>
                   </div>
+
+                  <div
+                    style={{
+                      borderTop: "1px solid #f0f0f0",
+                      paddingTop: "0.6rem",
+                      display: "grid",
+                      gap: "0.3rem",
+                    }}
+                  >
+                    <label style={{ color: "#6b7280", fontSize: "0.75rem" }}>
+                      Balance{v.value ? ` (face value ${v.value})` : ""}
+                    </label>
+                    <div style={{ display: "flex", gap: "0.4rem" }}>
+                      <div
+                        style={{
+                          flex: 1,
+                          minWidth: 0,
+                          display: "flex",
+                          alignItems: "center",
+                          border: "1px solid #d1d5db",
+                          borderRadius: "0.375rem",
+                          paddingLeft: "0.6rem",
+                        }}
+                      >
+                        <span style={{ color: "#6b7280", fontWeight: 700 }}>
+                          {symbolOf(v.currentValue ?? v.value)}
+                        </span>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          step="0.01"
+                          min="0"
+                          value={drafts[v.id] ?? numericPart(v.currentValue ?? v.value)}
+                          onChange={(e) =>
+                            setDrafts((d) => ({ ...d, [v.id]: e.target.value }))
+                          }
+                          placeholder="0.00"
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            padding: "0.4rem 0.6rem",
+                            border: "none",
+                            outline: "none",
+                            borderRadius: "0.375rem",
+                            fontWeight: 700,
+                            background: "transparent",
+                          }}
+                        />
+                      </div>
+                      <button
+                        onClick={() =>
+                          onUpdateValue(
+                            v,
+                            symbolOf(v.currentValue ?? v.value) +
+                              (drafts[v.id] ?? numericPart(v.currentValue ?? v.value)),
+                          )
+                        }
+                        disabled={busyId === v.id}
+                        style={{
+                          padding: "0.4rem 0.8rem",
+                          borderRadius: "0.375rem",
+                          border: "none",
+                          background: "#111827",
+                          color: "white",
+                          cursor: busyId === v.id ? "default" : "pointer",
+                        }}
+                      >
+                        {busyId === v.id ? "…" : "Save"}
+                      </button>
+                    </div>
+                    <div style={{ color: "#9ca3af", fontSize: "0.72rem" }}>
+                      {v.valueUpdatedAt
+                        ? `Updated ${formatDate(v.valueUpdatedAt)}`
+                        : "Not updated yet"}
+                    </div>
+                  </div>
+
+                  {v.brandId === UNCATEGORISED_ID && (
+                    <div
+                      style={{
+                        borderTop: "1px solid #f0f0f0",
+                        paddingTop: "0.6rem",
+                        display: "grid",
+                        gap: "0.3rem",
+                      }}
+                    >
+                      <label style={{ color: "#6b7280", fontSize: "0.75rem" }}>
+                        Categorise this voucher
+                      </label>
+                      <select
+                        value=""
+                        onChange={(e) => onCategorise(v, e.target.value)}
+                        disabled={busyId === v.id}
+                        style={{
+                          padding: "0.5rem 0.6rem",
+                          borderRadius: "0.375rem",
+                          border: "1px solid #d1d5db",
+                        }}
+                      >
+                        <option value="">Choose a brand…</option>
+                        {brandOptions
+                          .filter((b) => b.id !== UNCATEGORISED_ID)
+                          .map((b) => (
+                            <option key={b.id} value={b.id}>
+                              {b.name}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

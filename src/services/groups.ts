@@ -137,7 +137,13 @@ async function canAccessImage(userId: string, image: Image): Promise<boolean> {
 export async function updateImageFlags(
   userId: string,
   imageId: string,
-  patch: { active?: boolean; isLoyalty?: boolean },
+  patch: {
+    active?: boolean;
+    isLoyalty?: boolean;
+    currentValue?: string;
+    brand?: string;
+    brandId?: string;
+  },
 ): Promise<Image | null> {
   const found = await db
     .select()
@@ -147,9 +153,16 @@ export async function updateImageFlags(
   const image = found[0];
   if (!image || !(await canAccessImage(userId, image))) return null;
 
-  const updates: Partial<Image> = { updatedAt: new Date().toISOString() };
+  const now = new Date().toISOString();
+  const updates: Partial<Image> = { updatedAt: now };
   if (typeof patch.active === "boolean") updates.active = patch.active;
   if (typeof patch.isLoyalty === "boolean") updates.isLoyalty = patch.isLoyalty;
+  if (typeof patch.currentValue === "string") {
+    updates.currentValue = patch.currentValue;
+    updates.valueUpdatedAt = now; // stamp when the balance was edited
+  }
+  if (typeof patch.brandId === "string") updates.brandId = patch.brandId;
+  if (typeof patch.brand === "string") updates.brand = patch.brand;
 
   await db.update(images).set(updates).where(eq(images.id, imageId));
   return { ...image, ...updates };
