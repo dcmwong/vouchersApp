@@ -390,6 +390,7 @@ function Carousel({
                     </button>
                   </div>
 
+                  {!v.isLoyalty && (
                   <div
                     style={{
                       borderTop: "1px solid #f0f0f0",
@@ -465,6 +466,7 @@ function Carousel({
                         : "Not updated yet"}
                     </div>
                   </div>
+                  )}
 
                   {v.brandId === UNCATEGORISED_ID && (
                     <div
