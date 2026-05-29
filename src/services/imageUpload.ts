@@ -20,6 +20,7 @@ export interface UploadImageInput {
   title?: string | null;
   description?: string | null;
   brand?: string | null;
+  brandId?: string;
   value?: string | null;
   refId?: string | null;
   groupId?: string | null;
@@ -71,10 +72,12 @@ export async function uploadImage(input: UploadImageInput): Promise<Image> {
     title: input.title ?? null,
     description: input.description ?? null,
     brand: input.brand ?? null,
+    brandId: input.brandId ?? "uncategorised",
     value: input.value ?? null,
     refId: input.refId ?? null,
     groupId: input.groupId ?? null,
     active: true,
+    isLoyalty: false,
     tags: input.tags ?? [],
     createdAt: now,
     updatedAt: now,

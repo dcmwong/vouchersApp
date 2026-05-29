@@ -116,6 +116,18 @@ export default function HomePage() {
             >
               Groups
             </a>
+            <a
+              href="/admin"
+              style={{
+                padding: "0.6rem 1.25rem",
+                borderRadius: "0.5rem",
+                border: "1px solid #d1d5db",
+                color: "inherit",
+                textDecoration: "none",
+              }}
+            >
+              Admin
+            </a>
           </div>
         </SignedIn>
       </section>

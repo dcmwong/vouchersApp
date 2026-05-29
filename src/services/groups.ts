@@ -100,19 +100,26 @@ export async function getPrimaryGroupId(
 }
 
 /**
- * Active images the user can see: their own plus anything shared with their
- * groups. Inactive (used/expired) vouchers are excluded.
+ * Images the user can see: their own plus anything shared with their groups.
+ * Inactive (used/expired) vouchers are excluded unless `includeInactive` is set
+ * (the admin view). Loyalty cards are ordered first within the result.
  */
-export async function listVisibleImages(userId: string): Promise<Image[]> {
+export async function listVisibleImages(
+  userId: string,
+  includeInactive = false,
+): Promise<Image[]> {
   const groupIds = await getUserGroupIds(userId);
   const visible = groupIds.length
     ? or(eq(images.userId, userId), inArray(images.groupId, groupIds))
     : eq(images.userId, userId);
+  const where = includeInactive
+    ? visible
+    : and(eq(images.active, true), visible);
   return db
     .select()
     .from(images)
-    .where(and(eq(images.active, true), visible))
-    .orderBy(desc(images.createdAt));
+    .where(where)
+    .orderBy(desc(images.isLoyalty), desc(images.createdAt));
 }
 
 /** True if the user owns the image or shares a group with it. */
@@ -123,14 +130,14 @@ async function canAccessImage(userId: string, image: Image): Promise<boolean> {
 }
 
 /**
- * Sets a voucher active/inactive. Allowed for the owner or any member of the
- * group it's shared with. Returns the updated image, or null if not found or
- * the user isn't allowed to touch it.
+ * Updates a voucher's flags (active / loyalty). Allowed for the owner or any
+ * member of the group it's shared with. Returns the updated image, or null if
+ * not found or the user isn't allowed to touch it.
  */
-export async function setImageActive(
+export async function updateImageFlags(
   userId: string,
   imageId: string,
-  active: boolean,
+  patch: { active?: boolean; isLoyalty?: boolean },
 ): Promise<Image | null> {
   const found = await db
     .select()
@@ -140,9 +147,10 @@ export async function setImageActive(
   const image = found[0];
   if (!image || !(await canAccessImage(userId, image))) return null;
 
-  await db
-    .update(images)
-    .set({ active, updatedAt: new Date().toISOString() })
-    .where(eq(images.id, imageId));
-  return { ...image, active };
+  const updates: Partial<Image> = { updatedAt: new Date().toISOString() };
+  if (typeof patch.active === "boolean") updates.active = patch.active;
+  if (typeof patch.isLoyalty === "boolean") updates.isLoyalty = patch.isLoyalty;
+
+  await db.update(images).set(updates).where(eq(images.id, imageId));
+  return { ...image, ...updates };
 }

@@ -1,7 +1,9 @@
 import { auth } from "@clerk/nextjs/server";
 import { categoriseImage } from "@/services/categoriseImage";
 import { uploadImage } from "@/services/imageUpload";
+import { getSignedGetUrl } from "@/lib/r2";
 import { getPrimaryGroupId, listVisibleImages } from "@/services/groups";
+import { listBrands, resolveBrand, UNCATEGORISED_ID } from "@/services/brands";
 
 // Cloudflare Pages requires the edge runtime for routes that use bindings/fetch.
 export const runtime = "edge";
@@ -85,19 +87,28 @@ export async function POST(req: Request): Promise<Response> {
   // Categorise the image. This is best-effort: if the AI service is not
   // configured or fails, we still save the image under a name derived from the
   // filename and surface a warning rather than failing the whole upload.
+  const brands = await listBrands();
+
   let name: string;
   let tags: string[] = [];
-  let brand: string | null = null;
+  let brand = "Uncategorised";
+  let brandId = UNCATEGORISED_ID;
   let value: string | null = null;
   let refId: string | null = null;
   let warning: string | undefined;
   try {
-    const categorisation = await categoriseImage(bytes, mimeType);
+    const categorisation = await categoriseImage(
+      bytes,
+      mimeType,
+      brands.map((b) => b.name),
+    );
     name = categorisation.name;
     tags = categorisation.tags;
-    brand = categorisation.brand;
     value = categorisation.value;
     refId = categorisation.refId;
+    const chosen = resolveBrand(brands, categorisation.brand);
+    brand = chosen.name;
+    brandId = chosen.id;
   } catch (err) {
     name = file.name.replace(/\.[^.]+$/, "") || "Untitled image";
     warning = `Categorisation failed: ${
@@ -118,6 +129,7 @@ export async function POST(req: Request): Promise<Response> {
       buffer: bytes,
       title: name,
       brand,
+      brandId,
       value,
       refId,
       groupId,
@@ -145,8 +157,19 @@ export async function GET(req: Request): Promise<Response> {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // ?all=1 includes inactive vouchers too (used by the admin page).
+  const includeInactive =
+    new URL(req.url).searchParams.get("all") === "1";
+
   try {
-    const images = await listVisibleImages(userId);
+    const rows = await listVisibleImages(userId, includeInactive);
+    // Attach a short-lived presigned URL so the client can render the image.
+    const images = await Promise.all(
+      rows.map(async (img) => ({
+        ...img,
+        url: await getSignedGetUrl(img.r2Key).catch(() => null),
+      })),
+    );
     return Response.json({ images });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to list images.";

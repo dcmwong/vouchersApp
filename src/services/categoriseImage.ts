@@ -35,18 +35,15 @@ const VoucherSchema = z.object({
 
 export type Categorisation = z.infer<typeof VoucherSchema>;
 
-// JSON Schema for the forced tool call. Mirrors VoucherSchema.
-const TOOL_INPUT_SCHEMA = {
+// Base JSON Schema for the forced tool call; `brand` is added per-request with
+// an enum of the allowed vocabulary (see toolInputSchema).
+const BASE_TOOL_PROPERTIES = {
   type: "object",
   properties: {
     name: {
       type: "string",
       description:
         'A short display name, e.g. "Tesco £100 Gift Card" or "Amazon Voucher".',
-    },
-    brand: {
-      type: ["string", "null"],
-      description: "The retailer/brand, or null.",
     },
     value: {
       type: ["string", "null"],
@@ -62,9 +59,26 @@ const TOOL_INPUT_SCHEMA = {
       description: "3-5 short lowercase keyword tags.",
     },
   },
-  required: ["name", "brand", "value", "refId", "tags"],
+  required: ["name", "value", "refId", "tags"],
   additionalProperties: false,
 } as const;
+
+/** Builds the tool schema, constraining `brand` to the supplied vocabulary. */
+function toolInputSchema(brandNames: string[]) {
+  return {
+    ...BASE_TOOL_PROPERTIES,
+    properties: {
+      ...BASE_TOOL_PROPERTIES.properties,
+      brand: {
+        type: "string",
+        enum: brandNames,
+        description:
+          'The brand, chosen from the allowed list. Use "Uncategorised" if none clearly matches.',
+      },
+    },
+    required: [...BASE_TOOL_PROPERTIES.required, "brand"],
+  };
+}
 
 function env(name: string): string {
   const value = process.env[name];
@@ -104,6 +118,7 @@ interface AnthropicResponse {
 export async function categoriseImage(
   bytes: Uint8Array,
   mimeType: string,
+  brandNames: string[],
 ): Promise<Categorisation> {
   const apiKey = env("ANTHROPIC_API_KEY");
   const mediaType = ANTHROPIC_MEDIA_TYPES.has(mimeType) ? mimeType : "image/png";
@@ -121,13 +136,16 @@ export async function categoriseImage(
       system:
         "You catalogue gift cards and vouchers. Read the image and record the " +
         "requested fields exactly as shown. Use null for anything not visible. " +
-        "Do not invent values. Do NOT record card numbers or PINs — ignore " +
-        "those sensitive codes entirely.",
+        "Do not invent values. For brand, pick the single best match from the " +
+        "allowed list, ignoring differences in apostrophes, spacing and case " +
+        "(e.g. a card reading \"Sainsbury's\" matches the option \"Sainsbury's\"). " +
+        'If none clearly matches, use "Uncategorised". Do NOT record card ' +
+        "numbers or PINs — ignore those sensitive codes entirely.",
       tools: [
         {
           name: "record_voucher",
           description: "Record the catalogued voucher details.",
-          input_schema: TOOL_INPUT_SCHEMA,
+          input_schema: toolInputSchema(brandNames),
         },
       ],
       tool_choice: { type: "tool", name: "record_voucher" },

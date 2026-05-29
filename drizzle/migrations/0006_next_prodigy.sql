@@ -1,0 +1,1 @@
+ALTER TABLE `images` ADD `is_loyalty` integer DEFAULT false NOT NULL;

@@ -11,6 +11,13 @@ const timestamp = (name: string) =>
     .notNull()
     .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`);
 
+// Controlled vocabulary of voucher brands. `id` is a stable slug.
+export const brands = sqliteTable("brands", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  createdAt: timestamp("created_at"),
+});
+
 // A group (e.g. a family) that vouchers can be shared with.
 export const groups = sqliteTable("groups", {
   id: text("id").primaryKey(),
@@ -45,7 +52,13 @@ export const images = sqliteTable("images", {
   sizeBytes: integer("size_bytes").notNull(),
   title: text("title"),
   description: text("description"),
+  // Denormalised brand display name (kept in sync with brandId for easy listing).
   brand: text("brand"),
+  // Controlled brand, referencing the brands table. Defaults to "uncategorised".
+  brandId: text("brand_id")
+    .notNull()
+    .default("uncategorised")
+    .references(() => brands.id),
   value: text("value"),
   // Note: card number and PIN are intentionally NOT persisted. They are
   // extracted for the upload response only — never written to the database.
@@ -56,6 +69,8 @@ export const images = sqliteTable("images", {
   }),
   // Inactive vouchers (e.g. used/expired) are hidden from the listing.
   active: integer("active", { mode: "boolean" }).notNull().default(true),
+  // Loyalty cards are pinned to the top of their brand on the vouchers page.
+  isLoyalty: integer("is_loyalty", { mode: "boolean" }).notNull().default(false),
   tags: text("tags", { mode: "json" }).$type<string[]>().default([]),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
@@ -65,3 +80,4 @@ export type Image = typeof images.$inferSelect;
 export type NewImage = typeof images.$inferInsert;
 export type Group = typeof groups.$inferSelect;
 export type GroupMember = typeof groupMembers.$inferSelect;
+export type Brand = typeof brands.$inferSelect;

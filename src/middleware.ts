@@ -10,10 +10,21 @@ const isPublicRoute = createRouteMatcher([
   "/api/images",
 ]);
 
+const isApiRoute = createRouteMatcher(["/api/(.*)"]);
+
 export default clerkMiddleware(async (auth, request) => {
-  if (!isPublicRoute(request)) {
+  if (isPublicRoute(request)) return;
+
+  const { userId, redirectToSignIn } = await auth();
+  if (userId) return;
+
+  // Not signed in: API routes get a 404/401 (handled by protect); page visits
+  // are redirected to sign-in instead of showing a bare 404.
+  if (isApiRoute(request)) {
     await auth().protect();
+    return;
   }
+  return redirectToSignIn();
 });
 
 export const config = {
