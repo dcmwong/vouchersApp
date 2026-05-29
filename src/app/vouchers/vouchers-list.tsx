@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import useEmblaCarousel from "embla-carousel-react";
 
 interface Voucher {
@@ -121,6 +127,19 @@ function Carousel({
   });
   const [selected, setSelected] = useState(0);
   const [count, setCount] = useState(vouchers.length);
+  const [fullscreen, setFullscreen] = useState<Voucher | null>(null);
+  // Records pointer-down position so a swipe isn't mistaken for a tap.
+  const pointerStart = useRef<{ x: number; y: number } | null>(null);
+
+  // Close the lightbox on Escape.
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFullscreen(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fullscreen]);
 
   useEffect(() => {
     if (!emblaApi) return;
@@ -176,12 +195,23 @@ function Carousel({
                     src={v.url}
                     alt={v.title ?? "voucher"}
                     draggable={false}
+                    onPointerDown={(e) => {
+                      pointerStart.current = { x: e.clientX, y: e.clientY };
+                    }}
+                    onClick={(e) => {
+                      const s = pointerStart.current;
+                      // Only treat as a tap if the pointer barely moved (not a swipe).
+                      if (s && Math.abs(e.clientX - s.x) < 8 && Math.abs(e.clientY - s.y) < 8) {
+                        setFullscreen(v);
+                      }
+                    }}
                     style={{
                       width: "100%",
                       height: 300,
                       objectFit: "contain",
                       background: "#f9fafb",
                       display: "block",
+                      cursor: "zoom-in",
                     }}
                   />
                 ) : (
@@ -256,6 +286,53 @@ function Carousel({
           Next ›
         </button>
       </div>
+
+      {fullscreen && (
+        <div
+          onClick={() => setFullscreen(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 50,
+            background: "rgba(0,0,0,0.92)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "1rem",
+          }}
+        >
+          <button
+            aria-label="Close"
+            onClick={() => setFullscreen(null)}
+            style={{
+              position: "absolute",
+              top: "1rem",
+              right: "1.25rem",
+              fontSize: "1.75rem",
+              lineHeight: 1,
+              color: "white",
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+            }}
+          >
+            ✕
+          </button>
+          {fullscreen.url && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={fullscreen.url}
+              alt={fullscreen.title ?? "voucher"}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                maxWidth: "100%",
+                maxHeight: "100%",
+                objectFit: "contain",
+              }}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }
