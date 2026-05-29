@@ -1,0 +1,17 @@
+name = "my-image-app"
+# Date must be >= 2024-09-23 for nodejs_compat to expose async_hooks
+# (AsyncLocalStorage), which Clerk's middleware requires under next-on-pages.
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+pages_build_output_dir = ".vercel/output/static"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "my-image-app-db"
+database_id = "c2d068c3-8087-42d2-a17d-6841af6dc49c"
+migrations_dir = "drizzle/migrations"
+
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "my-image-app-images"
