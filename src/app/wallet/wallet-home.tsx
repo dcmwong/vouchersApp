@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useUser } from "@clerk/nextjs";
 import { CH, CW, FALLBACK_COLOR, THEME } from "./theme";
 import type { Brand, HydratedVoucher, Voucher } from "./types";
 import { balanceText, numericPart, symbolOf } from "./utils";
+import { AccountMenu } from "./components/AccountMenu";
 import { AmountEditor } from "./components/AmountEditor";
 import { HiddenView } from "./components/HiddenView";
 import { NavArrow } from "./components/NavArrow";
@@ -11,6 +13,7 @@ import { RedeemFull } from "./components/RedeemFull";
 import { VoucherCard } from "./components/VoucherCard";
 
 export function WalletHome() {
+  const { user } = useUser();
   const [vouchers, setVouchers] = useState<HydratedVoucher[]>([]);
   const [index, setIndex] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -20,6 +23,7 @@ export function WalletHome() {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [hiddenOpen, setHiddenOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const [brandFilter, setBrandFilter] = useState<string>("all");
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<{ msg: string; undo?: () => void } | null>(null);
@@ -283,23 +287,36 @@ export function WalletHome() {
                 </span>
               )}
             </button>
-            <div
+            <button
+              aria-label="Account menu"
+              onClick={() => setAccountOpen(true)}
               style={{
                 width: 42,
                 height: 42,
+                padding: 0,
                 borderRadius: "50%",
                 border: "2px solid var(--va-surface)",
                 overflow: "hidden",
                 background: "#e7e4de",
                 boxShadow: "0 1px 4px rgba(0,0,0,0.14), 0 0 0 1px var(--va-line)",
+                cursor: "pointer",
               }}
             >
-              <svg width="42" height="42" viewBox="0 0 42 42" style={{ display: "block" }}>
-                <rect width="42" height="42" fill="#eceae4" />
-                <circle cx="21" cy="16.5" r="7.4" fill="#a9aeb3" />
-                <path d="M7.5 40c0.7-8.2 6.6-12.6 13.5-12.6S33.8 31.8 34.5 40z" fill="#a9aeb3" />
-              </svg>
-            </div>
+              {user?.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={user.imageUrl}
+                  alt={user.fullName ?? "Account"}
+                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                />
+              ) : (
+                <svg width="42" height="42" viewBox="0 0 42 42" style={{ display: "block" }}>
+                  <rect width="42" height="42" fill="#eceae4" />
+                  <circle cx="21" cy="16.5" r="7.4" fill="#a9aeb3" />
+                  <path d="M7.5 40c0.7-8.2 6.6-12.6 13.5-12.6S33.8 31.8 34.5 40z" fill="#a9aeb3" />
+                </svg>
+              )}
+            </button>
           </div>
         </div>
         <div style={{ fontSize: 13.5, color: "var(--va-soft)", marginTop: 12, fontWeight: 500 }}>
@@ -512,6 +529,18 @@ export function WalletHome() {
           onCancel={() => setEditing(false)}
           onSave={saveBalance}
           busy={busy}
+        />
+      )}
+
+      {/* Account menu (popover under the profile avatar) */}
+      {accountOpen && (
+        <AccountMenu
+          hiddenCount={hidden.length}
+          onHidden={() => {
+            setAccountOpen(false);
+            setHiddenOpen(true);
+          }}
+          onClose={() => setAccountOpen(false)}
         />
       )}
 
