@@ -32,6 +32,9 @@ export function resolveBrand(
     all.find((b) => b.id === UNCATEGORISED_ID) ?? {
       id: UNCATEGORISED_ID,
       name: "Uncategorised",
+      color: null,
+      tag: null,
+      loyaltyScheme: null,
       createdAt: "",
     }
   );

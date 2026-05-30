@@ -2,11 +2,19 @@ import { describe, it, expect } from "vitest";
 import { resolveBrand } from "../brands";
 import type { Brand } from "@/db/schema";
 
+const mk = (id: string, name: string): Brand => ({
+  id,
+  name,
+  color: null,
+  tag: null,
+  loyaltyScheme: null,
+  createdAt: "",
+});
 const brands: Brand[] = [
-  { id: "tesco", name: "Tesco", createdAt: "" },
-  { id: "sainsburys", name: "Sainsbury's", createdAt: "" },
-  { id: "vue-cinema", name: "Vue Cinema", createdAt: "" },
-  { id: "uncategorised", name: "Uncategorised", createdAt: "" },
+  mk("tesco", "Tesco"),
+  mk("sainsburys", "Sainsbury's"),
+  mk("vue-cinema", "Vue Cinema"),
+  mk("uncategorised", "Uncategorised"),
 ];
 
 describe("resolveBrand", () => {

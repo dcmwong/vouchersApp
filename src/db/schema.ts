@@ -15,6 +15,10 @@ const timestamp = (name: string) =>
 export const brands = sqliteTable("brands", {
   id: text("id").primaryKey(),
   name: text("name").notNull().unique(),
+  // Family Wallet presentation: brand card colour, category tag, loyalty scheme.
+  color: text("color"),
+  tag: text("tag"),
+  loyaltyScheme: text("loyalty_scheme"),
   createdAt: timestamp("created_at"),
 });
 
@@ -71,6 +75,8 @@ export const images = sqliteTable("images", {
   groupId: text("group_id").references(() => groups.id, {
     onDelete: "set null",
   }),
+  // Which family member owns this voucher ("mom"|"dad"|"kids"|"all"). "all" = shared.
+  owner: text("owner").notNull().default("all"),
   // Inactive vouchers (e.g. used/expired) are hidden from the listing.
   active: integer("active", { mode: "boolean" }).notNull().default(true),
   // Loyalty cards are pinned to the top of their brand on the vouchers page.
