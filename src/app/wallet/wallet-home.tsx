@@ -1,327 +1,14 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-} from "react";
-
-// ── Static family roster (matches the design tokens) ──────────────
-interface FamilyMember {
-  id: string;
-  name: string;
-  color: string;
-}
-const FAMILY: FamilyMember[] = [
-  { id: "mom", name: "Mum", color: "#C2683F" },
-  { id: "dad", name: "Dad", color: "#3F6B5E" },
-  { id: "kids", name: "Kids", color: "#8E5B86" },
-  { id: "all", name: "Everyone", color: "#6B7280" },
-];
-
-// ── Coast palette (baked-in theme tokens) ─────────────────────────
-const THEME = {
-  "--va-accent": "#2C6FE0",
-  "--va-accent2": "#17A06A",
-  "--va-bg": "#F6F1E7",
-  "--va-surface": "#FFFFFF",
-  "--va-ink": "#2A211B",
-  "--va-soft": "rgba(42,33,27,0.55)",
-  "--va-line": "rgba(42,33,27,0.13)",
-  "--va-chip": "rgba(42,33,27,0.065)",
-  "--va-head": "Nunito, system-ui, sans-serif",
-  "--va-body": "Nunito, system-ui, sans-serif",
-  fontFamily: "var(--va-body)",
-} as unknown as CSSProperties;
-
-interface Brand {
-  id: string;
-  name: string;
-  color: string | null;
-  tag: string | null;
-  loyaltyScheme: string | null;
-}
-
-interface Voucher {
-  id: string;
-  brand: string | null;
-  brandId: string;
-  currentValue: string | null;
-  value: string | null;
-  owner: string;
-  isLoyalty: boolean;
-  active: boolean;
-  url: string | null;
-  refId: string | null;
-}
-
-interface HydratedVoucher extends Voucher {
-  color: string;
-  tag: string;
-  loyaltyScheme: string | null;
-}
-
-const FALLBACK_COLOR = "#6B7280";
-const CW = 214;
-const CH = 314;
-
-/** Leading currency symbol ("£42.50" → "£"); defaults to "£". */
-function symbolOf(s: string | null | undefined): string {
-  const m = (s ?? "").match(/^[^\d.]+/);
-  return m?.[0].trim() || "£";
-}
-/** Numeric portion ("£42.50" → "42.50"). */
-function numericPart(s: string | null | undefined): string {
-  return (s ?? "").replace(/[^\d.]/g, "");
-}
-
-function familyOf(id: string): FamilyMember {
-  return FAMILY.find((f) => f.id === id) ?? FAMILY[3];
-}
-
-function balanceText(v: HydratedVoucher): string {
-  return v.currentValue ?? v.value ?? "—";
-}
-
-// ── Family avatar ─────────────────────────────────────────────────
-function Avatar({ member, size = 26 }: { member: FamilyMember; size?: number }) {
-  const isAll = member.id === "all";
-  return (
-    <div
-      style={{
-        width: size,
-        height: size,
-        borderRadius: "50%",
-        background: isAll ? "rgba(255,255,255,0.25)" : member.color,
-        color: "#fff",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontWeight: 800,
-        fontSize: size * 0.42,
-        fontFamily: "var(--va-head)",
-        flexShrink: 0,
-      }}
-    >
-      {isAll ? "✦" : member.name[0]}
-    </div>
-  );
-}
-
-// ── Brand monogram tile ───────────────────────────────────────────
-function Monogram({
-  letter,
-  color,
-  size = 38,
-  radius = 11,
-}: {
-  letter: string;
-  color: string;
-  size?: number;
-  radius?: number;
-}) {
-  return (
-    <div
-      style={{
-        width: size,
-        height: size,
-        borderRadius: radius,
-        background: "rgba(255,255,255,0.94)",
-        color,
-        flexShrink: 0,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontFamily: "var(--va-head)",
-        fontWeight: 800,
-        fontSize: size * 0.46,
-      }}
-    >
-      {letter}
-    </div>
-  );
-}
-
-// ── Voucher card face (portrait) ──────────────────────────────────
-function VoucherCard({
-  v,
-  dim,
-  elevated,
-}: {
-  v: HydratedVoucher;
-  dim: boolean;
-  elevated: boolean;
-}) {
-  const fam = familyOf(v.owner);
-  const last4 = v.refId ? v.refId.replace(/\s/g, "").slice(-4) : null;
-  return (
-    <div
-      style={{
-        position: "relative",
-        width: "100%",
-        height: "100%",
-        borderRadius: 24,
-        overflow: "hidden",
-        color: "#fff",
-        background: v.color,
-        boxShadow: elevated
-          ? "0 24px 50px -14px rgba(40,25,15,0.5), 0 2px 6px rgba(0,0,0,0.12)"
-          : "0 8px 22px -8px rgba(40,25,15,0.4)",
-        transition: "box-shadow .3s",
-        display: "flex",
-        flexDirection: "column",
-        padding: "22px 22px 20px",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background:
-            "linear-gradient(150deg, rgba(255,255,255,0.22), rgba(255,255,255,0) 42%), linear-gradient(330deg, rgba(0,0,0,0.3), rgba(0,0,0,0) 55%)",
-        }}
-      />
-      {dim && (
-        <div style={{ position: "absolute", inset: 0, background: "rgba(20,12,8,0.30)" }} />
-      )}
-
-      <div
-        style={{
-          position: "relative",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <Monogram letter={(v.brand ?? "?")[0]} color={v.color} size={38} radius={11} />
-        <div
-          style={{
-            fontSize: 9.5,
-            fontWeight: 800,
-            letterSpacing: "0.1em",
-            textTransform: "uppercase",
-            padding: "4px 9px",
-            borderRadius: 999,
-            background: "rgba(255,255,255,0.2)",
-          }}
-        >
-          {v.isLoyalty ? "Loyalty" : "Gift card"}
-        </div>
-      </div>
-
-      <div style={{ position: "relative", marginTop: 11 }}>
-        <div
-          style={{
-            fontFamily: "var(--va-head)",
-            fontWeight: 800,
-            fontSize: 20,
-            lineHeight: 1.08,
-            letterSpacing: "-0.01em",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {v.brand ?? "Untitled"}
-        </div>
-        <div style={{ fontSize: 9.5, letterSpacing: "0.16em", opacity: 0.82, marginTop: 4 }}>
-          {v.tag}
-        </div>
-      </div>
-
-      <div
-        style={{
-          position: "relative",
-          marginTop: "auto",
-          display: "flex",
-          alignItems: "flex-end",
-          justifyContent: "space-between",
-        }}
-      >
-        <div>
-          {!v.isLoyalty && (
-            <>
-              <div
-                style={{
-                  fontSize: 10.5,
-                  letterSpacing: "0.14em",
-                  textTransform: "uppercase",
-                  opacity: 0.8,
-                }}
-              >
-                Balance
-              </div>
-              <div
-                style={{
-                  fontFamily: "var(--va-head)",
-                  fontWeight: 800,
-                  fontSize: 38,
-                  lineHeight: 1,
-                  marginTop: 4,
-                  fontVariantNumeric: "tabular-nums",
-                }}
-              >
-                {balanceText(v)}
-              </div>
-            </>
-          )}
-        </div>
-        <Avatar member={fam} size={26} />
-      </div>
-
-      <div
-        style={{
-          position: "relative",
-          marginTop: 13,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <span
-          style={{
-            fontFamily: "ui-monospace, Menlo, monospace",
-            fontSize: 12,
-            letterSpacing: "0.18em",
-            opacity: 0.78,
-          }}
-        >
-          {last4 ? `•••• ${last4}` : " "}
-        </span>
-        {v.loyaltyScheme && (
-          <span
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              fontSize: 11,
-              fontWeight: 700,
-              padding: "4px 9px",
-              borderRadius: 999,
-              background: "rgba(255,255,255,0.2)",
-              fontFamily: "var(--va-head)",
-            }}
-          >
-            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#fff" }} />
-            {v.loyaltyScheme}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-const chev = (left: boolean) => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-    <path
-      d={left ? "M15 6l-6 6 6 6" : "M9 6l6 6-6 6"}
-      stroke="var(--va-ink)"
-      strokeWidth="2.4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
+import { useEffect, useRef, useState } from "react";
+import { CH, CW, FALLBACK_COLOR, THEME } from "./theme";
+import type { Brand, HydratedVoucher, Voucher } from "./types";
+import { balanceText, numericPart, symbolOf } from "./utils";
+import { AmountEditor } from "./components/AmountEditor";
+import { HiddenView } from "./components/HiddenView";
+import { NavArrow } from "./components/NavArrow";
+import { RedeemFull } from "./components/RedeemFull";
+import { VoucherCard } from "./components/VoucherCard";
 
 export function WalletHome() {
   const [vouchers, setVouchers] = useState<HydratedVoucher[]>([]);
@@ -333,6 +20,7 @@ export function WalletHome() {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [hiddenOpen, setHiddenOpen] = useState(false);
+  const [brandFilter, setBrandFilter] = useState<string>("all");
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<{ msg: string; undo?: () => void } | null>(null);
   const drag = useRef<number | null>(null);
@@ -372,15 +60,54 @@ export function WalletHome() {
   const active = vouchers.filter((v) => v.active);
   const hidden = vouchers.filter((v) => !v.active);
 
-  // Clamp the index when the active list shrinks.
+  // Distinct brands among the active cards, for the filter pills.
+  const brandPills: { id: string; name: string; color: string }[] = [];
+  const seenBrand = new Set<string>();
+  for (const v of active) {
+    if (!seenBrand.has(v.brandId)) {
+      seenBrand.add(v.brandId);
+      brandPills.push({ id: v.brandId, name: v.brand ?? "Untitled", color: v.color });
+    }
+  }
+
+  // The cards shown in the carousel, narrowed to the selected brand pill and
+  // ordered so loyalty cards always come first (stable sort preserves the rest).
+  const visible = (
+    brandFilter === "all" ? active : active.filter((v) => v.brandId === brandFilter)
+  )
+    .slice()
+    .sort((a, b) => Number(b.isLoyalty) - Number(a.isLoyalty));
+
+  // A render-safe index: state can briefly lag behind a shrinking list (e.g.
+  // right after switching brand filters), so clamp before indexing `visible`.
+  const idx = visible.length ? Math.min(index, visible.length - 1) : 0;
+
+  // Reset to the first card whenever the brand filter changes.
   useEffect(() => {
-    if (index > active.length - 1) setIndex(Math.max(0, active.length - 1));
-  }, [active.length, index]);
+    setIndex(0);
+  }, [brandFilter]);
+
+  // If the filtered brand no longer has any active cards, fall back to "All".
+  useEffect(() => {
+    if (brandFilter !== "all" && !active.some((v) => v.brandId === brandFilter)) {
+      setBrandFilter("all");
+    }
+  }, [brandFilter, active]);
+
+  // Clamp the index when the visible list shrinks.
+  useEffect(() => {
+    if (index > visible.length - 1) setIndex(Math.max(0, visible.length - 1));
+  }, [visible.length, index]);
 
   const go = (dir: number) =>
-    setIndex((i) => Math.max(0, Math.min(active.length - 1, i + dir)));
+    setIndex((i) => Math.max(0, Math.min(visible.length - 1, i + dir)));
 
   const current = vouchers.find((v) => v.id === openId) ?? null;
+  // The brand's single loyalty card (isLoyalty). Its image is shown in the
+  // redeem view when the "Loyalty" tab is selected.
+  const loyaltyCard = current
+    ? active.find((x) => x.brandId === current.brandId && x.isLoyalty)
+    : undefined;
 
   const showToast = (msg: string, undo?: () => void) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -460,7 +187,7 @@ export function WalletHome() {
       await patchImage(id, { active: false });
       setVouchers((vs) => vs.map((v) => (v.id === id ? { ...v, active: false } : v)));
       closeRedeem();
-      setIndex((i) => Math.max(0, Math.min(i, active.length - 2)));
+      setIndex((i) => Math.max(0, Math.min(i, visible.length - 2)));
       showToast("Hidden from your wallet", () => restore(id));
     } catch (err) {
       showToast(err instanceof Error ? err.message : String(err));
@@ -580,6 +307,60 @@ export function WalletHome() {
         </div>
       </div>
 
+      {/* Brand filter pills */}
+      {brandPills.length > 0 && (
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 12,
+            padding: "14px 20px 6px",
+            flexShrink: 0,
+          }}
+        >
+          {[{ id: "all", name: "All", color: "var(--va-soft)" }, ...brandPills].map((b) => {
+            const selected = brandFilter === b.id;
+            return (
+              <button
+                key={b.id}
+                onClick={() => setBrandFilter(b.id)}
+                style={{
+                  flexShrink: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 9,
+                  padding: "11px 20px",
+                  borderRadius: 999,
+                  border: "none",
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                  fontFamily: "var(--va-head)",
+                  fontWeight: 800,
+                  fontSize: 16,
+                  background: selected ? "var(--va-accent)" : "var(--va-surface)",
+                  color: selected ? "#fff" : "var(--va-ink)",
+                  boxShadow: selected
+                    ? "0 1px 3px rgba(40,25,15,0.12)"
+                    : "0 1px 3px rgba(40,25,15,0.12), 0 0 0 1px var(--va-line)",
+                  transition: "background .2s, color .2s, box-shadow .2s",
+                }}
+              >
+                <span
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: "50%",
+                    background: selected ? "rgba(255,255,255,0.95)" : b.color,
+                    flexShrink: 0,
+                  }}
+                />
+                {b.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Carousel */}
       <div
         onPointerDown={(e) => {
@@ -616,8 +397,8 @@ export function WalletHome() {
           </div>
         ) : (
           <div style={{ position: "relative", height: CH + 40, transformStyle: "preserve-3d" }}>
-            {active.map((v, i) => {
-              const off = i - index;
+            {visible.map((v, i) => {
+              const off = i - idx;
               const ab = Math.abs(off);
               if (ab > 2) return null;
               return (
@@ -642,34 +423,34 @@ export function WalletHome() {
                 </div>
               );
             })}
-            {active.length > 1 && (
+            {visible.length > 1 && (
               <>
-                {index > 0 && <NavArrow left onClick={() => go(-1)} />}
-                {index < active.length - 1 && <NavArrow left={false} onClick={() => go(1)} />}
+                {idx > 0 && <NavArrow left onClick={() => go(-1)} />}
+                {idx < visible.length - 1 && <NavArrow left={false} onClick={() => go(1)} />}
               </>
             )}
           </div>
         )}
 
-        {active.length > 0 && (
-          <div style={{ padding: "18px 22px 0", textAlign: "center" }}>
+        {visible.length > 0 && (
+          <div style={{ padding: "18px 22px 0", marginTop: '50px', textAlign: "center" }}>
             <div style={{ fontFamily: "var(--va-head)", fontWeight: 800, fontSize: 18 }}>
-              {active[index]?.brand}
+              {visible[idx]?.brand}
             </div>
             <div style={{ fontSize: 13, color: "var(--va-soft)", marginTop: 2 }}>
-              Tap to view · {balanceText(active[index])}
+              Tap to view · {balanceText(visible[idx])}
             </div>
             <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 14 }}>
-              {active.map((v, i) => (
+              {visible.map((v, i) => (
                 <span
                   key={v.id}
                   onClick={() => setIndex(i)}
                   style={{
-                    width: i === index ? 22 : 7,
+                    width: i === idx ? 22 : 7,
                     height: 7,
                     borderRadius: 999,
                     cursor: "pointer",
-                    background: i === index ? "var(--va-accent)" : "var(--va-line)",
+                    background: i === idx ? "var(--va-accent)" : "var(--va-line)",
                     transition: "all .3s",
                   }}
                 />
@@ -711,6 +492,7 @@ export function WalletHome() {
       {current && (
         <RedeemFull
           v={current}
+          loyaltyUrl={loyaltyCard?.url ?? null}
           showLoyalty={showLoyalty}
           setShowLoyalty={setShowLoyalty}
           onClose={closeRedeem}
@@ -782,519 +564,6 @@ export function WalletHome() {
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-function NavArrow({ left, onClick }: { left: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick();
-      }}
-      style={{
-        position: "absolute",
-        top: "50%",
-        left: left ? 6 : undefined,
-        right: left ? undefined : 6,
-        transform: "translateY(-50%)",
-        width: 38,
-        height: 38,
-        borderRadius: "50%",
-        zIndex: 20,
-        border: "none",
-        background: "var(--va-surface)",
-        boxShadow: "0 4px 14px rgba(0,0,0,0.14)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        cursor: "pointer",
-        opacity: 0.96,
-      }}
-    >
-      {chev(left)}
-    </button>
-  );
-}
-
-function RedeemFull({
-  v,
-  showLoyalty,
-  setShowLoyalty,
-  onClose,
-  onEdit,
-  onHide,
-  busy,
-}: {
-  v: HydratedVoucher;
-  showLoyalty: boolean;
-  setShowLoyalty: (b: boolean) => void;
-  onClose: () => void;
-  onEdit: () => void;
-  onHide: () => void;
-  busy: boolean;
-}) {
-  const fam = familyOf(v.owner);
-  const hasLoyalty = !!v.loyaltyScheme;
-  const onLoyalty = hasLoyalty && showLoyalty;
-
-  return (
-    <div
-      style={{
-        position: "absolute",
-        inset: 0,
-        zIndex: 40,
-        background: "var(--va-bg)",
-        display: "flex",
-        flexDirection: "column",
-        overflowY: "auto",
-      }}
-    >
-      {/* Hero */}
-      <div
-        style={{
-          background: v.color,
-          color: "#fff",
-          padding: "56px 22px 26px",
-          borderBottomLeftRadius: 30,
-          borderBottomRightRadius: 30,
-          position: "relative",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <button
-            onClick={onClose}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 4,
-              border: "none",
-              cursor: "pointer",
-              background: "rgba(255,255,255,0.18)",
-              color: "#fff",
-              borderRadius: 999,
-              padding: "7px 14px 7px 10px",
-              fontSize: 14,
-              fontWeight: 700,
-              fontFamily: "var(--va-head)",
-            }}
-          >
-            ‹ Wallet
-          </button>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 13, opacity: 0.9 }}>
-              {fam.id === "all" ? "Shared" : `${fam.name}'s`}
-            </span>
-            <Avatar member={fam} size={28} />
-          </div>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 20 }}>
-          <Monogram letter={(v.brand ?? "?")[0]} color={v.color} size={48} radius={14} />
-          <div>
-            <div style={{ fontFamily: "var(--va-head)", fontWeight: 800, fontSize: 24, lineHeight: 1.05 }}>
-              {v.brand}
-            </div>
-            <div style={{ fontSize: 10, letterSpacing: "0.16em", opacity: 0.85, marginTop: 3 }}>
-              {onLoyalty ? (v.loyaltyScheme ?? "").toUpperCase() : "GIFT CARD"}
-            </div>
-          </div>
-        </div>
-
-        <div style={{ marginTop: 18 }}>
-          <div style={{ fontSize: 10.5, letterSpacing: "0.14em", textTransform: "uppercase", opacity: 0.8 }}>
-            {onLoyalty ? "Points" : "Balance"}
-          </div>
-          <div
-            style={{
-              fontFamily: "var(--va-head)",
-              fontWeight: 800,
-              fontSize: 46,
-              lineHeight: 1,
-              marginTop: 4,
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            {onLoyalty ? "—" : balanceText(v)}
-          </div>
-        </div>
-
-        {hasLoyalty && (
-          <div
-            style={{
-              marginTop: 18,
-              position: "relative",
-              display: "flex",
-              background: "rgba(255,255,255,0.18)",
-              borderRadius: 999,
-              padding: 3,
-            }}
-          >
-            {(["Gift card", v.loyaltyScheme ?? "Loyalty"] as const).map((label, i) => {
-              const activeSeg = (i === 1) === onLoyalty;
-              return (
-                <button
-                  key={label}
-                  onClick={() => setShowLoyalty(i === 1)}
-                  style={{
-                    flex: 1,
-                    border: "none",
-                    cursor: "pointer",
-                    borderRadius: 999,
-                    padding: "8px 10px",
-                    fontSize: 13,
-                    fontWeight: 700,
-                    fontFamily: "var(--va-head)",
-                    background: activeSeg ? "#fff" : "transparent",
-                    color: activeSeg ? v.color : "#fff",
-                    transition: "background .2s, color .2s",
-                  }}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Code panel — the voucher image (illustrative) */}
-      <div
-        style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 12,
-          padding: "26px 22px",
-        }}
-      >
-        <div style={{ fontSize: 10.5, letterSpacing: "0.16em", color: "var(--va-soft)", textTransform: "uppercase" }}>
-          Scan at checkout
-        </div>
-        <div
-          style={{
-            background: "var(--va-surface)",
-            borderRadius: 16,
-            padding: 12,
-            boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-            maxWidth: 320,
-            width: "100%",
-          }}
-        >
-          {v.url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={v.url}
-              alt={v.brand ?? "voucher"}
-              style={{ width: "100%", borderRadius: 8, display: "block" }}
-            />
-          ) : (
-            <div style={{ height: 200, background: "var(--va-chip)", borderRadius: 8 }} />
-          )}
-        </div>
-      </div>
-
-      {/* Actions */}
-      <div style={{ display: "flex", gap: 10, padding: "0 22px calc(30px + env(safe-area-inset-bottom))" }}>
-        {!onLoyalty && (
-          <button
-            onClick={onEdit}
-            disabled={busy}
-            style={{
-              flex: 1,
-              padding: "14px",
-              borderRadius: 14,
-              border: "1.5px solid var(--va-line)",
-              background: "var(--va-surface)",
-              color: "var(--va-ink)",
-              fontWeight: 800,
-              fontFamily: "var(--va-head)",
-              cursor: "pointer",
-            }}
-          >
-            Update balance
-          </button>
-        )}
-        <button
-          onClick={onHide}
-          disabled={busy}
-          style={{
-            flex: 1,
-            padding: "14px",
-            borderRadius: 14,
-            border: `1.5px solid ${onLoyalty ? "var(--va-line)" : "rgba(185,28,28,0.5)"}`,
-            background: "var(--va-surface)",
-            color: onLoyalty ? "var(--va-ink)" : "#b91c1c",
-            fontWeight: 800,
-            fontFamily: "var(--va-head)",
-            cursor: "pointer",
-          }}
-        >
-          Hide card
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function AmountEditor({
-  v,
-  draft,
-  setDraft,
-  bump,
-  onCancel,
-  onSave,
-  busy,
-}: {
-  v: HydratedVoucher;
-  draft: string;
-  setDraft: (s: string) => void;
-  bump: (amt: number) => void;
-  onCancel: () => void;
-  onSave: () => void;
-  busy: boolean;
-}) {
-  return (
-    <div
-      onClick={onCancel}
-      style={{
-        position: "absolute",
-        inset: 0,
-        zIndex: 80,
-        background: "rgba(20,12,8,0.5)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 22,
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          background: "var(--va-surface)",
-          borderRadius: 18,
-          padding: 22,
-          width: "100%",
-          maxWidth: 340,
-          display: "grid",
-          gap: 14,
-        }}
-      >
-        <div>
-          <div style={{ fontFamily: "var(--va-head)", fontWeight: 800, fontSize: 18 }}>
-            Update balance
-          </div>
-          <div style={{ fontSize: 13, color: "var(--va-soft)", marginTop: 2 }}>
-            {v.brand} gift card
-          </div>
-        </div>
-
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 4,
-            fontFamily: "var(--va-head)",
-            fontWeight: 800,
-          }}
-        >
-          <span style={{ fontSize: 30, color: "var(--va-soft)" }}>
-            {symbolOf(v.currentValue ?? v.value)}
-          </span>
-          <input
-            type="number"
-            inputMode="decimal"
-            step="0.01"
-            min="0"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            autoFocus
-            style={{
-              width: "60%",
-              border: "none",
-              outline: "none",
-              textAlign: "center",
-              fontFamily: "var(--va-head)",
-              fontWeight: 800,
-              fontSize: 46,
-              background: "transparent",
-              color: "var(--va-ink)",
-            }}
-          />
-        </div>
-
-        <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
-          {[-5, -1, 1, 5, 10].map((n) => (
-            <button
-              key={n}
-              onClick={() => bump(n)}
-              style={{
-                flex: 1,
-                padding: "8px 0",
-                borderRadius: 999,
-                border: "1px solid var(--va-line)",
-                background: "var(--va-chip)",
-                color: "var(--va-ink)",
-                fontWeight: 700,
-                cursor: "pointer",
-                fontVariantNumeric: "tabular-nums",
-              }}
-            >
-              {n > 0 ? `+${n}` : n}
-            </button>
-          ))}
-        </div>
-
-        <div style={{ display: "flex", gap: 10 }}>
-          <button
-            onClick={onCancel}
-            style={{
-              flex: 1,
-              padding: 13,
-              borderRadius: 13,
-              border: "1.5px solid var(--va-line)",
-              background: "var(--va-surface)",
-              fontWeight: 800,
-              fontFamily: "var(--va-head)",
-              cursor: "pointer",
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onSave}
-            disabled={busy}
-            style={{
-              flex: 1,
-              padding: 13,
-              borderRadius: 13,
-              border: "none",
-              background: "var(--va-accent)",
-              color: "#fff",
-              fontWeight: 800,
-              fontFamily: "var(--va-head)",
-              cursor: busy ? "default" : "pointer",
-            }}
-          >
-            {busy ? "…" : "Save"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function HiddenView({
-  hidden,
-  onClose,
-  onRestore,
-}: {
-  hidden: HydratedVoucher[];
-  onClose: () => void;
-  onRestore: (id: string) => void;
-}) {
-  return (
-    <div
-      style={{
-        position: "absolute",
-        inset: 0,
-        zIndex: 40,
-        background: "var(--va-bg)",
-        display: "flex",
-        flexDirection: "column",
-        overflowY: "auto",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "56px 22px 12px",
-        }}
-      >
-        <button
-          onClick={onClose}
-          style={{
-            border: "none",
-            background: "transparent",
-            cursor: "pointer",
-            color: "var(--va-accent)",
-            fontWeight: 800,
-            fontFamily: "var(--va-head)",
-            fontSize: 15,
-          }}
-        >
-          Done
-        </button>
-        <span style={{ fontFamily: "var(--va-head)", fontWeight: 800, fontSize: 17 }}>
-          Hidden cards
-        </span>
-        <span style={{ width: 44 }} />
-      </div>
-
-      <div style={{ padding: "0 22px", display: "grid", gap: 10 }}>
-        {hidden.length === 0 ? (
-          <p style={{ color: "var(--va-soft)", textAlign: "center", marginTop: 24 }}>
-            Nothing hidden.
-          </p>
-        ) : (
-          hidden.map((v) => (
-            <div
-              key={v.id}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                background: "var(--va-surface)",
-                borderRadius: 14,
-                padding: "12px 14px",
-              }}
-            >
-              <div
-                style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: 12,
-                  background: v.color,
-                  color: "#fff",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontFamily: "var(--va-head)",
-                  fontWeight: 800,
-                  flexShrink: 0,
-                }}
-              >
-                {(v.brand ?? "?")[0]}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700 }}>{v.brand}</div>
-                <div style={{ fontSize: 13, color: "var(--va-soft)" }}>{balanceText(v)}</div>
-              </div>
-              <button
-                onClick={() => onRestore(v.id)}
-                style={{
-                  border: "none",
-                  background: "var(--va-accent)",
-                  color: "#fff",
-                  borderRadius: 999,
-                  padding: "8px 16px",
-                  fontWeight: 800,
-                  fontFamily: "var(--va-head)",
-                  cursor: "pointer",
-                }}
-              >
-                Restore
-              </button>
-            </div>
-          ))
-        )}
-      </div>
     </div>
   );
 }
