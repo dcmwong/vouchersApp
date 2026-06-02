@@ -19,11 +19,12 @@ interface UploadResult {
 }
 
 const card: CSSProperties = {
-  border: "1px solid #e5e7eb",
-  borderRadius: "0.75rem",
-  padding: "1.25rem",
+  background: "var(--va-surface)",
+  borderRadius: 18,
+  padding: 22,
   maxWidth: "32rem",
   width: "100%",
+  boxShadow: "0 1px 3px rgba(40,25,15,0.12), 0 0 0 1px var(--va-line)",
 };
 
 export function Uploader() {
@@ -74,60 +75,163 @@ export function Uploader() {
     : [];
 
   return (
-    <form onSubmit={submit} style={{ ...card, display: "grid", gap: "1rem" }}>
-      <input type="file" accept="image/*" onChange={pick} />
+    <form onSubmit={submit} style={{ ...card, display: "grid", gap: 16 }}>
+      {/* Drop / pick zone */}
+      <label
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 10,
+          minHeight: 200,
+          padding: 16,
+          borderRadius: 14,
+          border: "2px dashed var(--va-line)",
+          background: "var(--va-chip)",
+          cursor: "pointer",
+          textAlign: "center",
+        }}
+      >
+        <input type="file" accept="image/*" onChange={pick} style={{ display: "none" }} />
+        {preview ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={preview}
+            alt="preview"
+            style={{ maxWidth: "100%", maxHeight: 320, borderRadius: 10, display: "block" }}
+          />
+        ) : (
+          <>
+            <div
+              style={{
+                width: 52,
+                height: 52,
+                borderRadius: "50%",
+                background: "var(--va-surface)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                boxShadow: "0 0 0 1px var(--va-line)",
+              }}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M12 16V5m0 0L8 9m4-4 4 4"
+                  stroke="var(--va-accent)"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M5 17v1a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1"
+                  stroke="var(--va-soft)"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </div>
+            <div style={{ fontFamily: "var(--va-head)", fontWeight: 800, fontSize: 16 }}>
+              Choose an image
+            </div>
+            <div style={{ fontSize: 13, color: "var(--va-soft)" }}>
+              Gift card or voucher · JPG, PNG, up to 5MB
+            </div>
+          </>
+        )}
+      </label>
 
-      {preview && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={preview}
-          alt="preview"
-          style={{ maxWidth: "100%", borderRadius: "0.5rem" }}
-        />
+      {file && (
+        <div style={{ fontSize: 13, color: "var(--va-soft)", textAlign: "center" }}>
+          {file.name}
+        </div>
       )}
 
       <button
         type="submit"
         disabled={!file || busy}
         style={{
-          padding: "0.6rem 1rem",
-          borderRadius: "0.5rem",
+          padding: "14px",
+          borderRadius: 14,
           border: "none",
-          background: !file || busy ? "#9ca3af" : "#111827",
-          color: "white",
+          background: !file || busy ? "var(--va-line)" : "var(--va-accent)",
+          color: "#fff",
+          fontFamily: "var(--va-head)",
+          fontWeight: 800,
+          fontSize: 16,
           cursor: !file || busy ? "default" : "pointer",
+          transition: "background .2s",
         }}
       >
         {busy ? "Categorising…" : "Upload & categorise"}
       </button>
 
-      {error && <p style={{ color: "#b91c1c", margin: 0 }}>⚠ {error}</p>}
+      {error && (
+        <p style={{ color: "#b91c1c", margin: 0, fontWeight: 600, fontSize: 14 }}>⚠ {error}</p>
+      )}
 
       {result && (
-        <div style={{ display: "grid", gap: "0.5rem" }}>
-          <strong style={{ color: "#047857" }}>Saved ✓</strong>
+        <div
+          style={{
+            display: "grid",
+            gap: 10,
+            background: "var(--va-chip)",
+            borderRadius: 14,
+            padding: 16,
+          }}
+        >
+          <strong
+            style={{
+              color: "var(--va-accent2)",
+              fontFamily: "var(--va-head)",
+              fontWeight: 800,
+            }}
+          >
+            Saved ✓
+          </strong>
           <table style={{ borderCollapse: "collapse", width: "100%" }}>
             <tbody>
               {rows.map(([label, val]) => (
                 <tr key={label}>
                   <td
                     style={{
-                      padding: "0.25rem 0.75rem 0.25rem 0",
-                      color: "#6b7280",
+                      padding: "0.3rem 0.75rem 0.3rem 0",
+                      color: "var(--va-soft)",
                       verticalAlign: "top",
                       whiteSpace: "nowrap",
+                      fontSize: 14,
                     }}
                   >
                     {label}
                   </td>
-                  <td style={{ padding: "0.25rem 0" }}>{val ?? "—"}</td>
+                  <td style={{ padding: "0.3rem 0", fontSize: 14, fontWeight: 600 }}>
+                    {val ?? "—"}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
           {result.warning && (
-            <p style={{ color: "#b45309", margin: 0 }}>{result.warning}</p>
+            <p style={{ color: "#b45309", margin: 0, fontSize: 13 }}>{result.warning}</p>
           )}
+          <a
+            href="/"
+            style={{
+              marginTop: 4,
+              textAlign: "center",
+              padding: "12px",
+              borderRadius: 14,
+              border: "1.5px solid var(--va-line)",
+              background: "var(--va-surface)",
+              color: "var(--va-ink)",
+              fontFamily: "var(--va-head)",
+              fontWeight: 800,
+              fontSize: 15,
+              textDecoration: "none",
+            }}
+          >
+            View in wallet
+          </a>
         </div>
       )}
     </form>

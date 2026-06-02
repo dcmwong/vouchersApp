@@ -1,5 +1,6 @@
+import { useRef } from "react";
 import type { HydratedVoucher } from "../types";
-import { familyOf } from "../utils";
+import { balanceText, familyOf } from "../utils";
 import { Avatar } from "./Avatar";
 
 export function RedeemFull({
@@ -10,6 +11,8 @@ export function RedeemFull({
   onClose,
   onEdit,
   onHide,
+  onPrev,
+  onNext,
   busy,
 }: {
   v: HydratedVoucher;
@@ -19,8 +22,29 @@ export function RedeemFull({
   onClose: () => void;
   onEdit: () => void;
   onHide: () => void;
+  onPrev?: () => void;
+  onNext?: () => void;
   busy: boolean;
 }) {
+  // Track the gesture start so a pointer release can be classified as a
+  // horizontal swipe (prev/next card) or an upward swipe (back to wallet).
+  const start = useRef<{ x: number; y: number } | null>(null);
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    start.current = { x: e.clientX, y: e.clientY };
+  };
+  const onPointerUp = (e: React.PointerEvent) => {
+    if (!start.current) return;
+    const dx = e.clientX - start.current.x;
+    const dy = e.clientY - start.current.y;
+    start.current = null;
+    if (Math.abs(dy) > Math.abs(dx)) {
+      if (dy < -60) onClose(); // swipe up → back to wallet
+      return;
+    }
+    if (dx > 42) onPrev?.();
+    else if (dx < -42) onNext?.();
+  };
   const fam = familyOf(v.owner);
   // A loyalty card exists for this brand only if we have its image.
   const hasLoyalty = !!loyaltyUrl;
@@ -29,6 +53,8 @@ export function RedeemFull({
 
   return (
     <div
+      onPointerDown={onPointerDown}
+      onPointerUp={onPointerUp}
       style={{
         position: "absolute",
         inset: 0,
@@ -37,6 +63,7 @@ export function RedeemFull({
         display: "flex",
         flexDirection: "column",
         overflowY: "auto",
+        touchAction: "pan-y",
       }}
     >
       {/* Hero */}
@@ -130,7 +157,7 @@ export function RedeemFull({
         }}
       >
         <div style={{ fontSize: 10.5, letterSpacing: "0.16em", color: "var(--va-soft)", textTransform: "uppercase" }}>
-          Scan at checkout
+          Current balance: {balanceText(v)}
         </div>
         <div
           style={{
@@ -191,7 +218,7 @@ export function RedeemFull({
             cursor: "pointer",
           }}
         >
-          Hide card
+          All used up
         </button>
       </div>
     </div>

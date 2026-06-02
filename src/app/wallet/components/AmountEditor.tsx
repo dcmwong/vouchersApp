@@ -5,7 +5,6 @@ export function AmountEditor({
   v,
   draft,
   setDraft,
-  bump,
   onCancel,
   onSave,
   busy,
@@ -13,7 +12,6 @@ export function AmountEditor({
   v: HydratedVoucher;
   draft: string;
   setDraft: (s: string) => void;
-  bump: (amt: number) => void;
   onCancel: () => void;
   onSave: () => void;
   busy: boolean;
@@ -86,28 +84,6 @@ export function AmountEditor({
               color: "var(--va-ink)",
             }}
           />
-        </div>
-
-        <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
-          {[-5, -1, 1, 5, 10].map((n) => (
-            <button
-              key={n}
-              onClick={() => bump(n)}
-              style={{
-                flex: 1,
-                padding: "8px 0",
-                borderRadius: 999,
-                border: "1px solid var(--va-line)",
-                background: "var(--va-chip)",
-                color: "var(--va-ink)",
-                fontWeight: 700,
-                cursor: "pointer",
-                fontVariantNumeric: "tabular-nums",
-              }}
-            >
-              {n > 0 ? `+${n}` : n}
-            </button>
-          ))}
         </div>
 
         <div style={{ display: "flex", gap: 10 }}>

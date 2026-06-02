@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import { CH, CW, FALLBACK_COLOR, THEME } from "./theme";
 import type { Brand, HydratedVoucher, Voucher } from "./types";
-import { balanceText, numericPart, symbolOf } from "./utils";
+import { balanceText, symbolOf } from "./utils";
 import { AccountMenu } from "./components/AccountMenu";
 import { AmountEditor } from "./components/AmountEditor";
 import { HiddenView } from "./components/HiddenView";
@@ -17,6 +17,7 @@ export function WalletHome() {
   const [vouchers, setVouchers] = useState<HydratedVoucher[]>([]);
   const [index, setIndex] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [showLoyalty, setShowLoyalty] = useState(false);
@@ -30,36 +31,47 @@ export function WalletHome() {
   const drag = useRef<number | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const [imgRes, brandRes] = await Promise.all([
-          fetch("/api/images?all=1"),
-          fetch("/api/brands"),
-        ]);
-        const imgData = (await imgRes.json()) as { images?: Voucher[]; error?: string };
-        if (!imgRes.ok) throw new Error(imgData.error ?? "Failed to load wallet");
-        const brandData = brandRes.ok
-          ? ((await brandRes.json()) as { brands?: Brand[] })
-          : { brands: [] };
-        const byId = new Map((brandData.brands ?? []).map((b) => [b.id, b]));
-        const hydrated = (imgData.images ?? []).map((v): HydratedVoucher => {
-          const b = byId.get(v.brandId);
-          return {
-            ...v,
-            color: b?.color ?? FALLBACK_COLOR,
-            tag: b?.tag ?? "OTHER",
-            loyaltyScheme: b?.loyaltyScheme ?? null,
-          };
-        });
-        setVouchers(hydrated);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        setLoading(false);
-      }
-    })();
+  const loadWallet = useCallback(async () => {
+    setError(null);
+    try {
+      const [imgRes, brandRes] = await Promise.all([
+        fetch("/api/images?all=1"),
+        fetch("/api/brands"),
+      ]);
+      const imgData = (await imgRes.json()) as { images?: Voucher[]; error?: string };
+      if (!imgRes.ok) throw new Error(imgData.error ?? "Failed to load wallet");
+      const brandData = brandRes.ok
+        ? ((await brandRes.json()) as { brands?: Brand[] })
+        : { brands: [] };
+      const byId = new Map((brandData.brands ?? []).map((b) => [b.id, b]));
+      const hydrated = (imgData.images ?? []).map((v): HydratedVoucher => {
+        const b = byId.get(v.brandId);
+        return {
+          ...v,
+          color: b?.color ?? FALLBACK_COLOR,
+          tag: b?.tag ?? "OTHER",
+          loyaltyScheme: b?.loyaltyScheme ?? null,
+        };
+      });
+      setVouchers(hydrated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
   }, []);
+
+  useEffect(() => {
+    loadWallet().finally(() => setLoading(false));
+  }, [loadWallet]);
+
+  const refresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await loadWallet();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const active = vouchers.filter((v) => v.active);
   const hidden = vouchers.filter((v) => !v.active);
@@ -140,6 +152,22 @@ export function WalletHome() {
     setShowLoyalty(false);
     setEditing(false);
   };
+  // Open the card at a given carousel position, keeping the carousel index in
+  // sync so the right card is centred when the full-screen view is closed.
+  const openAt = (i: number) => {
+    const v = visible[i];
+    if (!v) return;
+    setIndex(i);
+    setOpenId(v.id);
+    setShowLoyalty(false);
+    setEditing(false);
+  };
+  const openPrev = () => {
+    if (idx > 0) openAt(idx - 1);
+  };
+  const openNext = () => {
+    if (idx < visible.length - 1) openAt(idx + 1);
+  };
   const closeRedeem = () => {
     setOpenId(null);
     setEditing(false);
@@ -148,11 +176,9 @@ export function WalletHome() {
 
   const beginEdit = () => {
     if (!current) return;
-    setDraft(numericPart(current.currentValue ?? current.value) || "0");
+    setDraft("");
     setEditing(true);
   };
-  const bump = (amt: number) =>
-    setDraft((d) => Math.max(0, (parseFloat(d || "0") || 0) + amt).toFixed(2));
 
   const saveBalance = async () => {
     if (!current) return;
@@ -214,6 +240,7 @@ export function WalletHome() {
         isolation: "isolate",
       }}
     >
+      <style>{`@keyframes va-spin { to { transform: rotate(360deg); } }`}</style>
       {/* Header */}
       <div style={{ padding: "24px 20px 4px", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -236,6 +263,42 @@ export function WalletHome() {
             </span>
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <button
+              aria-label="Refresh wallet"
+              onClick={refresh}
+              disabled={refreshing}
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                border: "1.5px solid var(--va-line)",
+                background: "var(--va-surface)",
+                color: "var(--va-ink)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: refreshing ? "default" : "pointer",
+              }}
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                style={{
+                  transformOrigin: "center",
+                  animation: refreshing ? "va-spin 0.8s linear infinite" : "none",
+                }}
+              >
+                <path
+                  d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
             <button
               aria-label="Hidden cards"
               onClick={() => setHiddenOpen(true)}
@@ -515,6 +578,8 @@ export function WalletHome() {
           onClose={closeRedeem}
           onEdit={beginEdit}
           onHide={() => hideCard(current.id)}
+          onPrev={idx > 0 ? openPrev : undefined}
+          onNext={idx < visible.length - 1 ? openNext : undefined}
           busy={busy}
         />
       )}
@@ -525,7 +590,6 @@ export function WalletHome() {
           v={current}
           draft={draft}
           setDraft={setDraft}
-          bump={bump}
           onCancel={() => setEditing(false)}
           onSave={saveBalance}
           busy={busy}
