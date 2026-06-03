@@ -27,11 +27,17 @@ export function RedeemFull({
   busy: boolean;
 }) {
   // Track the gesture start so a pointer release can be classified as a
-  // horizontal swipe (prev/next card) or an upward swipe (back to wallet).
+  // horizontal swipe (prev/next card) or an upward swipe (hide — "All used up").
   const start = useRef<{ x: number; y: number } | null>(null);
 
   const onPointerDown = (e: React.PointerEvent) => {
     start.current = { x: e.clientX, y: e.clientY };
+    // Capture so we still get pointerup if the finger drifts off the element.
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // Pointer may already be gone; the gesture just falls back to bubbling.
+    }
   };
   const onPointerUp = (e: React.PointerEvent) => {
     if (!start.current) return;
@@ -39,11 +45,14 @@ export function RedeemFull({
     const dy = e.clientY - start.current.y;
     start.current = null;
     if (Math.abs(dy) > Math.abs(dx)) {
-      if (dy < -60) onClose(); // swipe up → back to wallet
+      if (dy < -60) onHide(); // swipe up → All used up (hide)
       return;
     }
     if (dx > 42) onPrev?.();
     else if (dx < -42) onNext?.();
+  };
+  const onPointerCancel = () => {
+    start.current = null;
   };
   const fam = familyOf(v.owner);
   // A loyalty card exists for this brand only if we have its image.
@@ -55,6 +64,7 @@ export function RedeemFull({
     <div
       onPointerDown={onPointerDown}
       onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
       style={{
         position: "absolute",
         inset: 0,
@@ -63,7 +73,7 @@ export function RedeemFull({
         display: "flex",
         flexDirection: "column",
         overflowY: "auto",
-        touchAction: "pan-y",
+        touchAction: "none",
       }}
     >
       {/* Hero */}
