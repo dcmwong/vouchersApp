@@ -20,7 +20,6 @@ export function WalletHome() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
-  const [showLoyalty, setShowLoyalty] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [hiddenOpen, setHiddenOpen] = useState(false);
@@ -119,11 +118,6 @@ export function WalletHome() {
     setIndex((i) => Math.max(0, Math.min(visible.length - 1, i + dir)));
 
   const current = vouchers.find((v) => v.id === openId) ?? null;
-  // The brand's single loyalty card (isLoyalty). Its image is shown in the
-  // redeem view when the "Loyalty" tab is selected.
-  const loyaltyCard = current
-    ? active.find((x) => x.brandId === current.brandId && x.isLoyalty)
-    : undefined;
 
   const showToast = (msg: string, undo?: () => void) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -149,7 +143,6 @@ export function WalletHome() {
 
   const openCard = (v: HydratedVoucher) => {
     setOpenId(v.id);
-    setShowLoyalty(false);
     setEditing(false);
   };
   // Open the card at a given carousel position, keeping the carousel index in
@@ -159,7 +152,6 @@ export function WalletHome() {
     if (!v) return;
     setIndex(i);
     setOpenId(v.id);
-    setShowLoyalty(false);
     setEditing(false);
   };
   const openPrev = () => {
@@ -171,7 +163,6 @@ export function WalletHome() {
   const closeRedeem = () => {
     setOpenId(null);
     setEditing(false);
-    setShowLoyalty(false);
   };
 
   const beginEdit = () => {
@@ -572,9 +563,6 @@ export function WalletHome() {
       {current && (
         <RedeemFull
           v={current}
-          loyaltyUrl={loyaltyCard?.url ?? null}
-          showLoyalty={showLoyalty}
-          setShowLoyalty={setShowLoyalty}
           onClose={closeRedeem}
           onEdit={beginEdit}
           onHide={() => hideCard(current.id)}

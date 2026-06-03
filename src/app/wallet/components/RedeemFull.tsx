@@ -1,13 +1,9 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import type { HydratedVoucher } from "../types";
-import { balanceText, familyOf } from "../utils";
-import { Avatar } from "./Avatar";
+import { balanceText } from "../utils";
 
 export function RedeemFull({
   v,
-  loyaltyUrl,
-  showLoyalty,
-  setShowLoyalty,
   onClose,
   onEdit,
   onHide,
@@ -16,9 +12,6 @@ export function RedeemFull({
   busy,
 }: {
   v: HydratedVoucher;
-  loyaltyUrl: string | null;
-  showLoyalty: boolean;
-  setShowLoyalty: (b: boolean) => void;
   onClose: () => void;
   onEdit: () => void;
   onHide: () => void;
@@ -26,157 +19,166 @@ export function RedeemFull({
   onNext?: () => void;
   busy: boolean;
 }) {
-  // Track the gesture start so a pointer release can be classified as a
-  // horizontal swipe (prev/next card) or an upward swipe (hide — "All used up").
+  // Rotating to landscape lets a wide barcode fill the screen's long edge; native
+  // pinch-zoom still works on top of this for fine adjustment.
+  const [rotated, setRotated] = useState(false);
+  const shownUrl = v.url;
+
+  // Swipe the whole view up to hide ("Remove card"). The card follows the finger
+  // and only commits once pulled past HIDE_THRESHOLD. We track active pointers so
+  // a two-finger pinch is left to the browser (native zoom) instead of dragging.
   const start = useRef<{ x: number; y: number } | null>(null);
+  const axis = useRef<"v" | "h" | null>(null);
+  const pointers = useRef<Set<number>>(new Set());
+  const [dragY, setDragY] = useState(0);
+  const [animating, setAnimating] = useState(false);
+  const HIDE_THRESHOLD = 140;
+  const pastThreshold = dragY < -HIDE_THRESHOLD;
 
   const onPointerDown = (e: React.PointerEvent) => {
-    start.current = { x: e.clientX, y: e.clientY };
-    // Capture so we still get pointerup if the finger drifts off the element.
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {
-      // Pointer may already be gone; the gesture just falls back to bubbling.
+    pointers.current.add(e.pointerId);
+    if (pointers.current.size > 1) {
+      // Second finger down → a pinch; abort any drag and let the browser zoom.
+      start.current = null;
+      axis.current = null;
+      if (dragY !== 0) {
+        setAnimating(true);
+        setDragY(0);
+      }
+      return;
     }
+    start.current = { x: e.clientX, y: e.clientY };
+    axis.current = null;
+    setAnimating(false);
   };
-  const onPointerUp = (e: React.PointerEvent) => {
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (pointers.current.size > 1 || !start.current) return;
+    const dx = e.clientX - start.current.x;
+    const dy = e.clientY - start.current.y;
+    // Lock the axis after a small initial movement so button taps still work.
+    if (axis.current === null && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
+      axis.current = Math.abs(dy) > Math.abs(dx) ? "v" : "h";
+    }
+    if (axis.current === "v") setDragY(Math.min(0, dy));
+  };
+  const onPointerEnd = (e: React.PointerEvent) => {
+    pointers.current.delete(e.pointerId);
     if (!start.current) return;
     const dx = e.clientX - start.current.x;
     const dy = e.clientY - start.current.y;
+    const moved = axis.current;
     start.current = null;
-    if (Math.abs(dy) > Math.abs(dx)) {
-      if (dy < -60) onHide(); // swipe up → All used up (hide)
+    axis.current = null;
+    if (moved === "h") {
+      // Horizontal flick → previous / next card.
+      if (dx > 42) onPrev?.();
+      else if (dx < -42) onNext?.();
       return;
     }
-    if (dx > 42) onPrev?.();
-    else if (dx < -42) onNext?.();
+    if (moved !== "v") return;
+    setAnimating(true);
+    if (dy < -HIDE_THRESHOLD) {
+      // Slide the rest of the way off-screen, then commit the hide.
+      setDragY(-window.innerHeight);
+      window.setTimeout(onHide, 220);
+    } else {
+      setDragY(0); // not far enough — spring back into place
+    }
   };
-  const onPointerCancel = () => {
-    start.current = null;
-  };
-  const fam = familyOf(v.owner);
-  // A loyalty card exists for this brand only if we have its image.
-  const hasLoyalty = !!loyaltyUrl;
-  const onLoyalty = hasLoyalty && showLoyalty;
-  const shownUrl = onLoyalty ? loyaltyUrl : v.url;
 
   return (
-    <div
-      onPointerDown={onPointerDown}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerCancel}
-      style={{
-        position: "absolute",
-        inset: 0,
-        zIndex: 40,
-        background: "var(--va-bg)",
-        display: "flex",
-        flexDirection: "column",
-        overflowY: "auto",
-        touchAction: "none",
-      }}
-    >
-      {/* Hero */}
+    <>
       <div
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerEnd}
+        onPointerCancel={onPointerEnd}
         style={{
-          background: v.color,
-          color: "#fff",
-          padding: "56px 22px 26px",
-          borderBottomLeftRadius: 30,
-          borderBottomRightRadius: 30,
-          position: "relative",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <button
-            onClick={onClose}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 4,
-              border: "none",
-              cursor: "pointer",
-              background: "rgba(255,255,255,0.18)",
-              color: "#fff",
-              borderRadius: 999,
-              padding: "7px 14px 7px 10px",
-              fontSize: 14,
-              fontWeight: 700,
-              fontFamily: "var(--va-head)",
-            }}
-          >
-            ‹ Wallet
-          </button>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 13, opacity: 0.9 }}>
-              {fam.id === "all" ? "Shared" : `${fam.name}'s`}
-            </span>
-            <Avatar member={fam} size={28} />
-          </div>
-        </div>
-
-        {hasLoyalty && (
-          <div
-            style={{
-              marginTop: 18,
-              position: "relative",
-              display: "flex",
-              background: "rgba(255,255,255,0.18)",
-              borderRadius: 999,
-              padding: 3,
-            }}
-          >
-            {(["Gift card", "Loyalty"] as const).map((label, i) => {
-              const activeSeg = (i === 1) === onLoyalty;
-              return (
-                <button
-                  key={label}
-                  onClick={() => setShowLoyalty(i === 1)}
-                  style={{
-                    flex: 1,
-                    border: "none",
-                    cursor: "pointer",
-                    borderRadius: 999,
-                    padding: "8px 10px",
-                    fontSize: 13,
-                    fontWeight: 700,
-                    fontFamily: "var(--va-head)",
-                    background: activeSeg ? "#fff" : "transparent",
-                    color: activeSeg ? v.color : "#fff",
-                    transition: "background .2s, color .2s",
-                  }}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Code panel — the voucher image (illustrative) */}
-      <div
-        style={{
-          flex: 1,
+          position: "absolute",
+          inset: 0,
+          zIndex: 40,
+          background: "#fff",
           display: "flex",
           flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 12,
-          padding: "26px 22px",
+          touchAction: "pinch-zoom",
+          transform: `translateY(${dragY}px)`,
+          opacity: Math.max(0.3, 1 - Math.abs(dragY) / 700),
+          transition: animating ? "transform .22s ease, opacity .22s ease" : "none",
         }}
       >
-        <div style={{ fontSize: 10.5, letterSpacing: "0.16em", color: "var(--va-soft)", textTransform: "uppercase" }}>
-          Current balance: {balanceText(v)}
-        </div>
+        {/* Balance, floated over the top of the image */}
         <div
           style={{
-            background: "var(--va-surface)",
-            borderRadius: 16,
-            padding: 12,
-            boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-            maxWidth: 320,
-            width: "100%",
+            position: "absolute",
+            top: "calc(16px + env(safe-area-inset-top))",
+            left: 0,
+            right: 0,
+            display: "flex",
+            justifyContent: "center",
+            zIndex: 2,
+            pointerEvents: "none",
+          }}
+        >
+          <span
+            style={{
+              background: "rgba(0,0,0,0.05)",
+              color: "var(--va-ink)",
+              borderRadius: 999,
+              padding: "8px 16px",
+              fontSize: 13,
+              fontWeight: 700,
+              fontFamily: "var(--va-head)",
+              letterSpacing: "0.02em",
+            }}
+          >
+            {v.brand ? `${v.brand} · ` : ""}
+            {balanceText(v)}
+          </span>
+        </div>
+
+        {/* Rotate toggle, floated top-right */}
+        {shownUrl && (
+          <button
+            onClick={() => setRotated((r) => !r)}
+            aria-label="Rotate"
+            style={{
+              position: "absolute",
+              top: "calc(14px + env(safe-area-inset-top))",
+              right: 14,
+              zIndex: 2,
+              width: 42,
+              height: 42,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              border: "none",
+              cursor: "pointer",
+              background: "rgba(0,0,0,0.06)",
+              color: "var(--va-ink)",
+              borderRadius: 999,
+            }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M4 12a8 8 0 0 1 13.7-5.6L20 8M20 8V3M20 8h-5"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        )}
+
+        {/* The barcode, filling the screen. Pinch-zoom works (touch-action). */}
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            overflow: "hidden",
+            padding: 16,
           }}
         >
           {shownUrl ? (
@@ -184,53 +186,116 @@ export function RedeemFull({
             <img
               src={shownUrl}
               alt={v.brand ?? "voucher"}
-              style={{ width: "100%", borderRadius: 8, display: "block" }}
+              style={
+                rotated
+                  ? { transform: "rotate(90deg)", maxWidth: "100vh", maxHeight: "100vw", display: "block" }
+                  : { maxWidth: "100%", maxHeight: "100%", display: "block", borderRadius: 10 }
+              }
             />
           ) : (
-            <div style={{ height: 200, background: "var(--va-chip)", borderRadius: 8 }} />
+            <div style={{ color: "var(--va-soft)", fontSize: 14 }}>No image</div>
           )}
         </div>
-      </div>
 
-      {/* Actions */}
-      <div style={{ display: "flex", gap: 10, padding: "0 22px calc(30px + env(safe-area-inset-bottom))" }}>
-        {!onLoyalty && (
+        {/* Action buttons, floated along the bottom over a fade for legibility */}
+        <div
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            bottom: 0,
+            padding: "40px 18px calc(20px + env(safe-area-inset-bottom))",
+            background: "linear-gradient(to top, rgba(255,255,255,0.96), rgba(255,255,255,0))",
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+            zIndex: 2,
+          }}
+        >
+          <div style={{ display: "flex", gap: 10 }}>
+            <button
+              onClick={onHide}
+              disabled={busy}
+              style={{
+                flex: 1,
+                padding: "15px",
+                borderRadius: 14,
+                border: "1.5px solid rgba(185,28,28,0.5)",
+                background: "var(--va-surface)",
+                color: "#b91c1c",
+                fontWeight: 800,
+                fontFamily: "var(--va-head)",
+                cursor: "pointer",
+              }}
+            >
+              Remove card
+            </button>
+            <button
+              onClick={onEdit}
+              disabled={busy}
+              style={{
+                flex: 1,
+                padding: "15px",
+                borderRadius: 14,
+                border: "none",
+                background: v.color,
+                color: "#fff",
+                fontWeight: 800,
+                fontFamily: "var(--va-head)",
+                cursor: "pointer",
+              }}
+            >
+              Update balance
+            </button>
+          </div>
           <button
-            onClick={onEdit}
-            disabled={busy}
+            onClick={onClose}
             style={{
-              flex: 1,
-              padding: "14px",
+              padding: "13px",
               borderRadius: 14,
-              border: "1.5px solid var(--va-line)",
-              background: "var(--va-surface)",
+              border: "none",
+              background: "rgba(0,0,0,0.06)",
               color: "var(--va-ink)",
-              fontWeight: 800,
+              fontWeight: 700,
               fontFamily: "var(--va-head)",
               cursor: "pointer",
             }}
           >
-            Update balance
+            ‹ Back to Wallet
           </button>
-        )}
-        <button
-          onClick={onHide}
-          disabled={busy}
+        </div>
+      </div>
+
+      {/* Live feedback while swiping the view up to remove it. */}
+      {dragY < -16 && !animating && (
+        <div
           style={{
-            flex: 1,
-            padding: "14px",
-            borderRadius: 14,
-            border: `1.5px solid ${onLoyalty ? "var(--va-line)" : "rgba(185,28,28,0.5)"}`,
-            background: "var(--va-surface)",
-            color: onLoyalty ? "var(--va-ink)" : "#b91c1c",
-            fontWeight: 800,
-            fontFamily: "var(--va-head)",
-            cursor: "pointer",
+            position: "fixed",
+            top: "calc(20px + env(safe-area-inset-top))",
+            left: 0,
+            right: 0,
+            display: "flex",
+            justifyContent: "center",
+            zIndex: 45,
+            pointerEvents: "none",
           }}
         >
-          All used up
-        </button>
-      </div>
-    </div>
+          <span
+            style={{
+              background: pastThreshold ? "#b91c1c" : "rgba(0,0,0,0.72)",
+              color: "#fff",
+              borderRadius: 999,
+              padding: "8px 16px",
+              fontSize: 13,
+              fontWeight: 700,
+              fontFamily: "var(--va-head)",
+              transition: "background .15s",
+            }}
+          >
+            {pastThreshold ? "Release to remove card" : "Keep pulling up to remove"}
+          </span>
+        </div>
+      )}
+    </>
   );
 }
