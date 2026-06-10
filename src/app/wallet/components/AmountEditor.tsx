@@ -7,14 +7,18 @@ export function AmountEditor({
   setDraft,
   onCancel,
   onSave,
+  onScan,
   busy,
+  scanning,
 }: {
   v: HydratedVoucher;
   draft: string;
   setDraft: (s: string) => void;
   onCancel: () => void;
   onSave: () => void;
+  onScan: (file: File) => void;
   busy: boolean;
+  scanning: boolean;
 }) {
   return (
     <div
@@ -86,6 +90,35 @@ export function AmountEditor({
           />
         </div>
 
+        <label
+          style={{
+            display: "block",
+            padding: 13,
+            borderRadius: 13,
+            border: "1.5px solid var(--va-line)",
+            background: "var(--va-surface)",
+            fontWeight: 800,
+            fontFamily: "var(--va-head)",
+            textAlign: "center",
+            cursor: busy || scanning ? "default" : "pointer",
+            opacity: busy || scanning ? 0.6 : 1,
+          }}
+        >
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            disabled={busy || scanning}
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) onScan(f);
+              e.target.value = "";
+            }}
+          />
+          {scanning ? "Scanning…" : "📷 Scan a receipt"}
+        </label>
+
         <div style={{ display: "flex", gap: 10 }}>
           <button
             onClick={onCancel}
@@ -104,7 +137,7 @@ export function AmountEditor({
           </button>
           <button
             onClick={onSave}
-            disabled={busy}
+            disabled={busy || scanning}
             style={{
               flex: 1,
               padding: 13,

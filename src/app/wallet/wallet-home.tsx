@@ -26,6 +26,7 @@ export function WalletHome() {
   const [accountOpen, setAccountOpen] = useState(false);
   const [brandFilter, setBrandFilter] = useState<string>("all");
   const [busy, setBusy] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const [toast, setToast] = useState<{ msg: string; undo?: () => void } | null>(null);
   const drag = useRef<number | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -189,6 +190,32 @@ export function WalletHome() {
       showToast(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const scanReceipt = async (file: File) => {
+    if (!current) return;
+    setScanning(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/scan-balance", { method: "POST", body: fd });
+      const data = (await res.json()) as {
+        found?: boolean;
+        balance?: number | null;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(data.error ?? `Scan failed (HTTP ${res.status})`);
+      if (data.found && typeof data.balance === "number") {
+        // Prefill only — the user reviews the amount and taps Save.
+        setDraft(data.balance.toFixed(2));
+      } else {
+        showToast("Couldn't read a balance from that photo");
+      }
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err));
+    } finally {
+      setScanning(false);
     }
   };
 
@@ -580,7 +607,9 @@ export function WalletHome() {
           setDraft={setDraft}
           onCancel={() => setEditing(false)}
           onSave={saveBalance}
+          onScan={scanReceipt}
           busy={busy}
+          scanning={scanning}
         />
       )}
 
